@@ -6,7 +6,7 @@
 #' @param df A data frame.
 #' @param id_col A string giving the column name that identifies groups.
 #' @param val_col A string giving the column name containing numeric values.
-#' @param grid A numeric vector of probabilities passed to [stats::quantile()].
+#' @param alpha_grid A numeric vector of probabilities passed to [stats::quantile()].
 #'   Defaults to `seq(0, 1, 0.01)`.
 #' @param quantile_type The `type` argument passed to [stats::quantile()].
 #'   Defaults to `3`.
@@ -45,14 +45,14 @@ empb <- function(
     stop("`val_col` must refer to a numeric column.", call. = FALSE)
   }
 
-  if (!is.numeric(grid) || length(grid) == 0L || anyNA(grid)) {
-    stop("`grid` must be a non-empty numeric vector without missing values.",
+  if (!is.numeric(alpha_grid) || length(alpha_grid) == 0L || anyNA(alpha_grid)) {
+    stop("`alpha_grid` must be a non-empty numeric vector without missing values.",
       call. = FALSE
     )
   }
 
-  if (any(grid < 0 | grid > 1)) {
-    stop("`grid` values must lie between 0 and 1.", call. = FALSE)
+  if (any(alpha_grid < 0 | alpha_grid > 1)) {
+    stop("`alpha_grid` values must lie between 0 and 1.", call. = FALSE)
   }
 
   if (!is.numeric(quantile_type) || length(quantile_type) != 1L ||
@@ -71,11 +71,11 @@ empb <- function(
 
   quantile_matrix <- vapply(
     split_vals,
-    FUN.VALUE = numeric(length(grid)),
+    FUN.VALUE = numeric(length(alpha_grid)),
     FUN = function(values) {
       stats::quantile(
         values[!is.na(values)],
-        probs = grid,
+        probs = alpha_grid,
         type = quantile_type,
         names = FALSE
       )
@@ -92,7 +92,7 @@ empb <- function(
   z_value <- stats::qnorm(0.975)
 
   data.frame(
-    quantile = grid,
+    quantile = alpha_grid,
     estimate = estimate,
     se = se,
     ci_lo = estimate - z_value * se,
