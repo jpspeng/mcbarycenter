@@ -18,7 +18,7 @@ empb <- function(
   df,
   id_col,
   val_col,
-  grid = seq(0.01, 0.99, 0.01),
+  alpha_grid = seq(0.01, 0.99, 0.01),
   quantile_type = 3
 ) {
   if (!is.data.frame(df)) {
