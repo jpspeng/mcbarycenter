@@ -6,7 +6,7 @@ mcb(
   df,
   id_col = "id",
   val_col = "x",
-  method = c("efron", "npmle", "raw", "beta"),
+  method = c("spline", "npmle", "raw", "beta"),
   x_grid = 1:10,
   cutpoints = NULL,
   bootstrap_samples = 100,
@@ -14,7 +14,7 @@ mcb(
   use_midpoint = TRUE,
   estimate_first_last = TRUE,
   weight_col = NULL,
-  progress = interactive(),
+  progress = TRUE,
   ci_level = 0.95,
   ci_method = c("percentile", "wald"),
   ...

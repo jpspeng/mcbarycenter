@@ -6,7 +6,7 @@ estimate_all_mixtures(
   df,
   id_col = "id",
   val_col = "x",
-  method = c("efron", "npmle", "raw", "beta"),
+  method = c("spline", "npmle", "raw", "beta"),
   x_grid = 1:10,
   weight_col = NULL,
   ...

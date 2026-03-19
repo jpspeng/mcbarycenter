@@ -397,3 +397,30 @@
     attempts = attempts
   )
 }
+
+.lookup_cumul_at_alpha <- function(mixture_df, alpha) {
+  if (!is.data.frame(mixture_df)) {
+    stop("Each mixture estimate must be a data.frame.", call. = FALSE)
+  }
+
+  if (!all(c("theta", "g") %in% names(mixture_df))) {
+    stop(
+      "Each mixture estimate must contain columns `theta` and `g`.",
+      call. = FALSE
+    )
+  }
+
+  mix <- mixture_df
+  if (!"cumul" %in% names(mix)) {
+    mix <- .standardize_mixture_df(theta = mix$theta, g = mix$g)
+  } else {
+    mix <- mix[order(mix$theta), , drop = FALSE]
+  }
+
+  idx <- which(mix$theta <= alpha)
+  if (length(idx) == 0) {
+    return(0)
+  }
+
+  mix$cumul[max(idx)]
+}

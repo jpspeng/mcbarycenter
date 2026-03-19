@@ -21,7 +21,7 @@ estimate_mixture_efron <- function(df,
                                    c0 = 1,
                                    weight_col = NULL) {
   if (!is.null(weight_col)) {
-    stop("`weight_col` is not supported for method = 'efron'.", call. = FALSE)
+    stop("`weight_col` is not supported for method = 'spline'.", call. = FALSE)
   }
 
   tau <- sort(unique(as.numeric(tau)))
@@ -285,7 +285,7 @@ estimate_mixture_beta <- function(df,
 estimate_all_mixtures <- function(df,
                                   id_col = "id",
                                   val_col = "x",
-                                  method = c("efron", "npmle", "raw", "beta"),
+                                  method = c("spline", "npmle", "raw", "beta"),
                                   x_grid = 1:10,
                                   weight_col = NULL,
                                   ...) {
@@ -298,7 +298,7 @@ estimate_all_mixtures <- function(df,
     weight_col = weight_col
   )
 
-  if (!is.null(weight_col) && method %in% c("efron")) {
+  if (!is.null(weight_col) && method %in% c("spline")) {
     stop(
       "`weight_col` is only supported for methods 'npmle', 'raw', and 'beta'.",
       call. = FALSE
@@ -319,7 +319,7 @@ estimate_all_mixtures <- function(df,
     } else {
       mixture_est <- switch(
         method,
-        efron = estimate_mixture_efron(
+        spline = estimate_mixture_efron(
           df = df,
           id_col = "id",
           val_col = "x",

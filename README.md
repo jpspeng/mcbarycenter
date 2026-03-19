@@ -2,12 +2,17 @@
 
 This package implements the marginal corrected barycenter (MCB) estimator.
 
-At a high level, it estimates mixture distributions across thresholded outcomes
-and combines them to estimate a quantile curve with uncertainty intervals.
+## Install
+
+```{r}
+devtools::install_github("jpspeng/npthreshold")
+```
+
+## Using the package
 
 Available mixture methods:
 
-- `efron`
+- `spline`
 - `npmle`
 - `raw`
 - `beta`
