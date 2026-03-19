@@ -223,10 +223,6 @@
     maxit = 100,
     trace = FALSE
 ) {
-  if (!requireNamespace("VGAM", quietly = TRUE)) {
-    stop("Package `VGAM` must be installed.", call. = FALSE)
-  }
-  
   if (!all(c("n", "s") %in% names(df_bin))) {
     stop("`df_bin` must contain columns `n` and `s`.", call. = FALSE)
   }

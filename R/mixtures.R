@@ -17,7 +17,7 @@ estimate_mixture_efron <- function(df,
                                    val_col = "x",
                                    x_thresh,
                                    tau = seq(from = 0.005, to = 0.995, by = 0.005),
-                                   pDegree = 20,
+                                   pDegree = 7,
                                    c0 = 1,
                                    weight_col = NULL) {
   if (!is.null(weight_col)) {
@@ -72,10 +72,6 @@ estimate_mixture_npmle <- function(df,
                                    tau = seq(from = 0, to = 1, by = 0.005),
                                    weight_col = NULL,
                                    mixsqp_control = list()) {
-  if (!requireNamespace("mixsqp", quietly = TRUE)) {
-    stop("Package `mixsqp` must be installed.", call. = FALSE)
-  }
-
   tau <- sort(unique(as.numeric(tau)))
 
   if (anyNA(tau) || any(tau < 0 | tau > 1)) {

@@ -14,9 +14,10 @@ Depends:
 Imports:
     dplyr,
     ggplot2,
-    rlang
-Suggests:
     mixsqp,
-    testthat,
+    rlang,
+    splines,
     VGAM
+Suggests:
+    testthat
 LazyData: true
