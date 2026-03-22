@@ -180,7 +180,6 @@ est_all_quantiles <- function(mixture_res,
 #' @param weight_col Optional column name containing id-level weights.
 #' @param progress Logical; whether to display a bootstrap progress bar.
 #' @param ci_level Confidence level.
-#' @param ci_method Confidence interval method.
 #' @param ... Additional arguments passed to [estimate_all_mixtures()].
 #'
 #' @return A data frame with columns `quantile`, `estimate`, `se`, `ci_lo`,
@@ -199,38 +198,35 @@ mcb <- function(df,
                 weight_col = NULL,
                 progress = TRUE,
                 ci_level = 0.95,
-                ci_method = c("percentile", "wald"),
                 ...) {
   method <- match.arg(method)
-  ci_method <- match.arg(ci_method)
-
+  
   df <- .standardize_input_df(
     df,
     id_col = id_col,
     val_col = val_col,
     weight_col = weight_col
   )
-
+  
   if (!is.numeric(bootstrap_samples) || length(bootstrap_samples) != 1 ||
       is.na(bootstrap_samples) || bootstrap_samples < 2) {
     stop("`bootstrap_samples` must be a single integer >= 2.", call. = FALSE)
   }
-
+  
   bootstrap_samples <- as.integer(bootstrap_samples)
-
+  
   if (!is.numeric(ci_level) || length(ci_level) != 1 || is.na(ci_level) ||
       ci_level <= 0 || ci_level >= 1) {
     stop("`ci_level` must be a single numeric value in (0, 1).",
-      call. = FALSE
-    )
+         call. = FALSE)
   }
-
+  
   if (!is.null(cutpoints)) {
     if (!is.numeric(cutpoints) || length(cutpoints) != 1 ||
         is.na(cutpoints) || cutpoints < 2) {
       stop("`cutpoints` must be a single numeric value >= 2.", call. = FALSE)
     }
-
+    
     x_grid_overall <- seq(
       min(df$x),
       max(df$x),
@@ -239,7 +235,7 @@ mcb <- function(df,
   } else {
     x_grid_overall <- x_grid
   }
-
+  
   overall_mixture_res <- estimate_all_mixtures(
     df = df,
     id_col = "id",
@@ -249,27 +245,27 @@ mcb <- function(df,
     weight_col = weight_col,
     ...
   )
-
+  
   overall_quantile_res <- est_all_quantiles(
     mixture_res = overall_mixture_res,
     alpha_grid = alpha_grid,
     use_midpoint = use_midpoint,
     estimate_first_last = estimate_first_last
   )
-
+  
   ids <- unique(df$id)
   by_id <- split(df, df$id)
-
+  
   res_matrix <- matrix(
     NA_real_,
     nrow = bootstrap_samples,
     ncol = length(alpha_grid)
   )
-
+  
   if (!is.logical(progress) || length(progress) != 1L || is.na(progress)) {
     stop("`progress` must be a single TRUE/FALSE value.", call. = FALSE)
   }
-
+  
   if (progress) {
     pb <- utils::txtProgressBar(
       min = 0,
@@ -279,16 +275,16 @@ mcb <- function(df,
     )
     on.exit(close(pb), add = TRUE)
   }
-
+  
   for (i in seq_len(bootstrap_samples)) {
     sampled_ids <- sample(ids, size = length(ids), replace = TRUE)
     picked <- by_id[as.character(sampled_ids)]
     picked <- setNames(picked, seq_along(picked))
-
+    
     df_boot <- dplyr::bind_rows(picked, .id = "boot_id")
     df_boot <- dplyr::mutate(df_boot, id = .data$boot_id)
     df_boot <- dplyr::select(df_boot, -boot_id)
-
+    
     if (!is.null(cutpoints)) {
       x_grid_boot <- seq(
         min(df_boot$x),
@@ -298,7 +294,7 @@ mcb <- function(df,
     } else {
       x_grid_boot <- x_grid
     }
-
+    
     boot_mixture_res <- estimate_all_mixtures(
       df = df_boot,
       id_col = "id",
@@ -308,57 +304,69 @@ mcb <- function(df,
       weight_col = weight_col,
       ...
     )
-
+    
     boot_quantile_res <- est_all_quantiles(
       mixture_res = boot_mixture_res,
       alpha_grid = alpha_grid,
       use_midpoint = use_midpoint,
       estimate_first_last = estimate_first_last
     )
-
+    
     res_matrix[i, ] <- boot_quantile_res$estimate
-
+    
     if (progress) {
       utils::setTxtProgressBar(pb, i)
       flush.console()
     }
   }
-
+  
+  # Bootstrap summaries
+  estimate_bs <- colMeans(res_matrix, na.rm = TRUE)
   se <- apply(res_matrix, 2, stats::sd, na.rm = TRUE)
-
+  cov_mat <- stats::cov(res_matrix, use = "pairwise.complete.obs")
+  
+  # CI setup
   alpha_ci <- 1 - ci_level
   lo_prob <- alpha_ci / 2
   hi_prob <- 1 - alpha_ci / 2
-
-  if (ci_method == "percentile") {
-    ci_lo <- apply(
-      res_matrix,
-      2,
-      stats::quantile,
-      probs = lo_prob,
-      na.rm = TRUE,
-      names = FALSE
-    )
-
-    ci_hi <- apply(
-      res_matrix,
-      2,
-      stats::quantile,
-      probs = hi_prob,
-      na.rm = TRUE,
-      names = FALSE
-    )
-  } else {
-    z <- stats::qnorm(1 - alpha_ci / 2)
-    ci_lo <- overall_quantile_res$estimate - z * se
-    ci_hi <- overall_quantile_res$estimate + z * se
-  }
-
-  data.frame(
+  
+  # Percentile CIs
+  pct_ci_lo <- apply(
+    res_matrix,
+    2,
+    stats::quantile,
+    probs = lo_prob,
+    na.rm = TRUE,
+    names = FALSE
+  )
+  
+  pct_ci_hi <- apply(
+    res_matrix,
+    2,
+    stats::quantile,
+    probs = hi_prob,
+    na.rm = TRUE,
+    names = FALSE
+  )
+  
+  # Wald CIs
+  z <- stats::qnorm(1 - alpha_ci / 2)
+  ci_lo <- overall_quantile_res$estimate - z * se
+  ci_hi <- overall_quantile_res$estimate + z * se
+  
+  res <- data.frame(
     quantile = alpha_grid,
     estimate = overall_quantile_res$estimate,
+    estimate_bs = estimate_bs,
     se = se,
     ci_lo = ci_lo,
-    ci_hi = ci_hi
+    ci_hi = ci_hi,
+    pct_ci_lo = pct_ci_lo,
+    pct_ci_hi = pct_ci_hi
+  )
+  
+  list(
+    res = res,
+    cov = cov_mat
   )
 }

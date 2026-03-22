@@ -19,5 +19,7 @@ Imports:
     splines,
     VGAM
 Suggests:
-    testthat
+    testthat,
+    REBayes, 
+    Rmosek
 LazyData: true

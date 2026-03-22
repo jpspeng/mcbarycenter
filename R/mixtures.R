@@ -60,7 +60,10 @@ estimate_mixture_efron <- function(df,
 #' @param x_thresh Numeric threshold used to define successes.
 #' @param tau Support grid for the estimated mixture.
 #' @param weight_col Optional column name containing id-level weights.
+#' @param backend Estimation backend: `"mixsqp"` (default) or `"REBayes"`.
 #' @param mixsqp_control Optional control list passed to [mixsqp::mixsqp()].
+#' @param rebayes_control Optional named list of additional arguments passed to
+#'   [REBayes::Bmix()] when `backend = "REBayes"`.
 #'
 #' @return A standardized mixture data frame with columns `theta`, `g`, and
 #'   `cumul`.
@@ -71,65 +74,130 @@ estimate_mixture_npmle <- function(df,
                                    x_thresh,
                                    tau = seq(from = 0, to = 1, by = 0.005),
                                    weight_col = NULL,
-                                   mixsqp_control = list()) {
+                                   backend = c("mixsqp", "REBayes"),
+                                   mixsqp_control = list(),
+                                   rebayes_control = list()) {
+  backend <- match.arg(backend)
+  
   tau <- sort(unique(as.numeric(tau)))
-
+  
   if (anyNA(tau) || any(tau < 0 | tau > 1)) {
     stop("`tau` must be numeric and lie in [0, 1].", call. = FALSE)
   }
-
+  
   df <- .standardize_input_df(
     df,
     id_col = id_col,
     val_col = val_col,
     weight_col = weight_col
   )
-
+  
   df_bin <- .aggregate_binomial_data(
     df = df,
     x_thresh = x_thresh,
     weight_col = weight_col
   )
-
-  if (is.null(mixsqp_control$verbose)) {
-    mixsqp_control$verbose <- FALSE
-  }
-
-  logL <- outer(
-    X = seq_len(nrow(df_bin)),
-    Y = seq_along(tau),
-    FUN = Vectorize(function(i, j) {
-      stats::dbinom(
-        x = df_bin$s[i],
-        size = df_bin$n[i],
-        prob = tau[j],
-        log = TRUE
+  
+  fit_g <- switch(
+    backend,
+    
+    mixsqp = {
+      if (is.null(mixsqp_control$verbose)) {
+        mixsqp_control$verbose <- FALSE
+      }
+      
+      logL <- outer(
+        X = seq_len(nrow(df_bin)),
+        Y = seq_along(tau),
+        FUN = Vectorize(function(i, j) {
+          stats::dbinom(
+            x = df_bin$s[i],
+            size = df_bin$n[i],
+            prob = tau[j],
+            log = TRUE
+          )
+        })
       )
-    })
+      
+      fit <- if (is.null(weight_col)) {
+        do.call(
+          mixsqp::mixsqp,
+          list(
+            L = logL,
+            log = TRUE,
+            control = mixsqp_control
+          )
+        )
+      } else {
+        do.call(
+          mixsqp::mixsqp,
+          list(
+            L = logL,
+            w = df_bin$weight,
+            log = TRUE,
+            control = mixsqp_control
+          )
+        )
+      }
+      
+      fit$x
+    },
+    
+    REBayes = {
+      if (!requireNamespace("REBayes", quietly = TRUE)) {
+        stop(
+          paste(
+            "The `REBayes` backend requires the optional package `REBayes`.",
+            "Install it first, or use `backend = \"mixsqp\"`."
+          ),
+          call. = FALSE
+        )
+      }
+      
+      if (!requireNamespace("Rmosek", quietly = TRUE)) {
+        stop(
+          paste(
+            "The `REBayes` backend requires a working MOSEK installation via `Rmosek`.",
+            "Install/configure MOSEK and `Rmosek`, or use `backend = \"mixsqp\"`."
+          ),
+          call. = FALSE
+        )
+      }
+      
+      rebayes_args <- c(
+        list(
+          x = df_bin$s,
+          k = df_bin$n,
+          v = tau,
+          collapse = FALSE
+        ),
+        if (is.null(weight_col)) {
+          list()
+        } else {
+          list(weights = df_bin$weight / sum(df_bin$weight))
+        },
+        rebayes_control
+      )
+      
+      fit <- tryCatch(
+        do.call(REBayes::Bmix, rebayes_args),
+        error = function(e) {
+          stop(
+            paste(
+              "The `REBayes` backend failed.",
+              "This usually means MOSEK / `Rmosek` is not installed or configured correctly.",
+              "Original error:", conditionMessage(e)
+            ),
+            call. = FALSE
+          )
+        }
+      )
+      
+      fit$y
+    }
   )
-
-  fit <- if (is.null(weight_col)) {
-    do.call(
-      mixsqp::mixsqp,
-      list(
-        L = logL,
-        log = TRUE,
-        control = mixsqp_control
-      )
-    )
-  } else {
-    do.call(
-      mixsqp::mixsqp,
-      list(
-        L = logL,
-        w = df_bin$weight,
-        log = TRUE,
-        control = mixsqp_control
-      )
-    )
-  }
-
-  .standardize_mixture_df(theta = tau, g = fit$x)
+  
+  .standardize_mixture_df(theta = tau, g = fit_g)
 }
 
 #' Estimate an Empirical Raw Mixture
