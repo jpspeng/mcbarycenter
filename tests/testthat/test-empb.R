@@ -1,14 +1,14 @@
-test_that("empb averages grouped quantiles and computes Wald intervals", {
+test_that("empbary averages grouped quantiles and computes Wald intervals", {
   df <- data.frame(
     id = c("a", "a", "b", "b"),
     value = c(1, 3, 5, 7)
   )
 
-  result <- empb(
+  result <- empbary(
     df = df,
     id_col = "id",
     val_col = "value",
-    grid = c(0, 0.5, 1),
+    alpha_grid = c(0, 0.5, 1),
     quantile_type = 3
   )
 
@@ -18,28 +18,30 @@ test_that("empb averages grouped quantiles and computes Wald intervals", {
 
   expect_identical(
     names(result),
-    c("quantile", "estimate", "se", "ci_lo", "ci_hi")
+    c("res", "cov", "data")
   )
-  expect_equal(result$quantile, c(0, 0.5, 1))
-  expect_equal(result$estimate, expected_estimate)
-  expect_equal(result$se, expected_se)
-  expect_equal(result$ci_lo, expected_estimate - z_value * expected_se)
-  expect_equal(result$ci_hi, expected_estimate + z_value * expected_se)
+  expect_equal(result$res$quantile, c(0, 0.5, 1))
+  expect_equal(result$res$estimate, expected_estimate)
+  expect_equal(result$res$se, expected_se)
+  expect_equal(result$res$ci_lo, expected_estimate - z_value * expected_se)
+  expect_equal(result$res$ci_hi, expected_estimate + z_value * expected_se)
+  expect_equal(result$data, data.frame(id = df$id, val = df$value))
 })
 
-test_that("empb drops groups with only missing values", {
+test_that("empbary drops groups with only missing values", {
   df <- data.frame(
     id = c("a", "a", "b", "b"),
     value = c(1, 3, NA, NA)
   )
 
-  result <- empb(
+  result <- empbary(
     df = df,
     id_col = "id",
     val_col = "value",
-    grid = c(0, 0.5, 1)
+    alpha_grid = c(0, 0.5, 1)
   )
 
-  expect_equal(result$estimate, c(1, 1, 3))
-  expect_true(all(is.na(result$se)))
+  expect_equal(result$res$estimate, c(1, 1, 3))
+  expect_true(all(is.na(result$res$se)))
+  expect_equal(result$data, data.frame(id = df$id, val = df$value))
 })

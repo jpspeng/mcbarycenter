@@ -420,3 +420,74 @@
 
   mix$cumul[max(idx)]
 }
+
+#' Compute Difference in Quantile Estimates
+#'
+#' Takes two quantile result objects and returns the estimated difference along
+#' with delta-method standard errors and confidence intervals, assuming
+#' independence.
+#'
+#' @param df1 A data frame containing columns `quantile`, `estimate`, and `se`,
+#'   or a list with a `res` data frame in that format.
+#' @param df2 A data frame containing columns `quantile`, `estimate`, and `se`,
+#'   or a list with a `res` data frame in that format.
+#' @param conf_level Confidence level for the interval. Default is 0.95.
+#'
+#' @return A data frame with columns:
+#'   `quantile`, `estimate`, `se`, `ci_lo`, and `ci_hi`.
+#' @export
+quantile_diff <- function(df1, df2, conf_level = 0.95) {
+  required_cols <- c("quantile", "estimate", "se")
+  
+  as_quantile_df <- function(x, arg_label, required_cols) {
+    if (is.list(x) && !is.data.frame(x) && "res" %in% names(x)) {
+      x <- x$res
+    }
+    
+    if (!is.data.frame(x)) {
+      stop(sprintf("%s must be a data frame or a list with `$res`.", arg_label),
+        call. = FALSE
+      )
+    }
+    
+    if (!all(required_cols %in% names(x))) {
+      stop(
+        sprintf(
+          "%s must contain `%s`.",
+          arg_label,
+          paste(required_cols, collapse = "`, `")
+        ),
+        call. = FALSE
+      )
+    }
+    
+    x
+  }
+  
+  df1 <- as_quantile_df(df1, "`df1`", required_cols)
+  df2 <- as_quantile_df(df2, "`df2`", required_cols)
+  
+  if (nrow(df1) != nrow(df2)) {
+    stop("`df1` and `df2` must have the same number of rows.", call. = FALSE)
+  }
+  
+  if (!identical(df1$quantile, df2$quantile)) {
+    stop("`df1$quantile` and `df2$quantile` must match exactly.", call. = FALSE)
+  }
+  
+  alpha <- 1 - conf_level
+  z <- stats::qnorm(1 - alpha / 2)
+  
+  estimate <- df1$estimate - df2$estimate
+  se <- sqrt(df1$se^2 + df2$se^2)
+  
+  out <- data.frame(
+    quantile = df1$quantile,
+    estimate = estimate,
+    se = se,
+    ci_lo = estimate - z * se,
+    ci_hi = estimate + z * se
+  )
+  
+  out
+}

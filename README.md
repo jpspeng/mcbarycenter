@@ -23,7 +23,7 @@ Example:
 library(mcbarycenter)
 data("sample_data")
 
-mcb(sample_data,
+mcbary(sample_data,
     id_col = "id",
     val_col = "value",
     method = "npmle",

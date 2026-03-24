@@ -1,18 +1,20 @@
-#' Estimate Mean Alpha Quantiles from Mixture Distributions
+#' Estimate the Distribution of an Alpha Quantile
 #'
 #' @param mixture_res A named list of mixture estimates.
 #' @param alpha A single quantile level in `[0, 1]`.
 #' @param use_midpoint Logical; whether to use interval midpoints between
 #'   adjacent thresholds.
 #' @param estimate_first_last Logical controlling endpoint treatment.
+#' @param use_isotonic Logical; whether to enforce monotonicity in the
+#'   cumulative mixture curves across threshold values.
 #'
-#' @return A numeric scalar giving the estimated mean alpha quantile.
+#' @return A data frame with columns `x`, `pmf`, and `cdf`.
 #' @export
-est_mean_alpha_quantile <- function(mixture_res,
-                                    alpha,
-                                    use_midpoint = TRUE,
-                                    estimate_first_last = TRUE,
-                                    use_isotonic = TRUE) {
+est_dist_alpha <- function(mixture_res,
+                           alpha,
+                           use_midpoint = TRUE,
+                           estimate_first_last = TRUE,
+                           use_isotonic = TRUE) {
   if (!is.list(mixture_res) || length(mixture_res) < 2) {
     stop("`mixture_res` must be a list of at least two mixture estimates.",
          call. = FALSE
@@ -108,14 +110,42 @@ est_mean_alpha_quantile <- function(mixture_res,
     )
   }
   
-  delta_df <- dplyr::mutate(
+  dist_df <- dplyr::transmute(
     delta_df,
-    weighted_delta = .data$delta / delta_sum
+    x = .data$x_temp,
+    pmf = .data$delta / delta_sum
+  )
+  dist_df$cdf <- cumsum(dist_df$pmf)
+  
+  dist_df
+}
+
+#' Estimate Mean Alpha Quantiles from Mixture Distributions
+#'
+#' @param mixture_res A named list of mixture estimates.
+#' @param alpha A single quantile level in `[0, 1]`.
+#' @param use_midpoint Logical; whether to use interval midpoints between
+#'   adjacent thresholds.
+#' @param estimate_first_last Logical controlling endpoint treatment.
+#' @param use_isotonic Logical; whether to enforce monotonicity in the
+#'   cumulative mixture curves across threshold values.
+#'
+#' @return A numeric scalar giving the estimated mean alpha quantile.
+#' @export
+est_mean_alpha_quantile <- function(mixture_res,
+                                    alpha,
+                                    use_midpoint = TRUE,
+                                    estimate_first_last = TRUE,
+                                    use_isotonic = TRUE) {
+  dist_df <- est_dist_alpha(
+    mixture_res = mixture_res,
+    alpha = alpha,
+    use_midpoint = use_midpoint,
+    estimate_first_last = estimate_first_last,
+    use_isotonic = use_isotonic
   )
   
-  # print(delta_df)
-  
-  sum(delta_df$weighted_delta * delta_df$x_temp)
+  sum(dist_df$x * dist_df$pmf)
 }
 
 
@@ -177,15 +207,19 @@ est_all_quantiles <- function(mixture_res,
 #' @param use_midpoint Logical; whether to use interval midpoints between
 #'   adjacent thresholds.
 #' @param estimate_first_last Logical controlling endpoint treatment.
+#' @param use_isotonic Logical; if `TRUE`, apply isotonic regression to
+#'   `res$estimate`, `res$ci_lo`, and `res$ci_hi`.
 #' @param weight_col Optional column name containing id-level weights.
 #' @param progress Logical; whether to display a bootstrap progress bar.
 #' @param ci_level Confidence level.
 #' @param ... Additional arguments passed to [estimate_all_mixtures()].
 #'
-#' @return A data frame with columns `quantile`, `estimate`, `se`, `ci_lo`,
-#'   and `ci_hi`.
+#' @return A list with components `res`, `cov`, `mixtures`, `method`, and
+#'   `data`. `res` is a data frame with columns `quantile`, `estimate`, `se`,
+#'   `ci_lo`, and `ci_hi`. `data` contains the original `id_col` and `val_col`
+#'   columns from the input.
 #' @export
-mcb <- function(df,
+mcbary <- function(df,
                 id_col = "id",
                 val_col = "x",
                 method = c("spline", "npmle", "raw", "beta"),
@@ -195,11 +229,16 @@ mcb <- function(df,
                 alpha_grid = seq(0.01, 0.99, by = 0.01),
                 use_midpoint = TRUE,
                 estimate_first_last = TRUE,
+                use_isotonic = FALSE,
                 weight_col = NULL,
                 progress = TRUE,
                 ci_level = 0.95,
                 ...) {
   method <- match.arg(method)
+  data_out <- data.frame(
+    id = df[[id_col]],
+    val = df[[val_col]]
+  )
   
   df <- .standardize_input_df(
     df,
@@ -219,6 +258,11 @@ mcb <- function(df,
       ci_level <= 0 || ci_level >= 1) {
     stop("`ci_level` must be a single numeric value in (0, 1).",
          call. = FALSE)
+  }
+  
+  if (!is.logical(use_isotonic) || length(use_isotonic) != 1L ||
+      is.na(use_isotonic)) {
+    stop("`use_isotonic` must be a single TRUE/FALSE value.", call. = FALSE)
   }
   
   if (!is.null(cutpoints)) {
@@ -365,8 +409,24 @@ mcb <- function(df,
     pct_ci_hi = pct_ci_hi
   )
   
+  if (use_isotonic) {
+    res$estimate <- stats::isoreg(x = res$quantile, y = res$estimate)$yf
+    res$ci_lo <- stats::isoreg(x = res$quantile, y = res$ci_lo)$yf
+    res$ci_hi <- stats::isoreg(x = res$quantile, y = res$ci_hi)$yf
+  }
+
+  if (any(diff(res$estimate) < 0, na.rm = TRUE)) {
+    warning(
+      "The estimated barycenter's quantile function is not monotone increasing.",
+      call. = FALSE
+    )
+  }
+  
   list(
     res = res,
-    cov = cov_mat
+    cov = cov_mat,
+    mixtures = overall_mixture_res,
+    method = method,
+    data = data_out
   )
 }

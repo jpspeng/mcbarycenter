@@ -17,14 +17,16 @@
 #'   `ci_lo`, and `ci_hi`.}
 #'   \item{cov}{An estimated covariance matrix for the quantile barycenter
 #'   estimator, of dimension `length(alpha_grid) x length(alpha_grid)`.}
+#'   \item{data}{The original input reduced to standardized `id` and `val`
+#'   columns.}
 #' }
 #' @export
-empb <- function(
+empbary <- function(
     df,
     id_col,
     val_col,
     alpha_grid = seq(0.01, 0.99, 0.01),
-    quantile_type = 3
+    quantile_type = 1
 ) {
   if (!is.data.frame(df)) {
     stop("`df` must be a data frame.", call. = FALSE)
@@ -49,6 +51,11 @@ empb <- function(
   if (!is.numeric(df[[val_col]])) {
     stop("`val_col` must refer to a numeric column.", call. = FALSE)
   }
+  
+  data_out <- data.frame(
+    id = df[[id_col]],
+    val = df[[val_col]]
+  )
   
   if (!is.numeric(alpha_grid) || length(alpha_grid) == 0L || anyNA(alpha_grid)) {
     stop(
@@ -121,6 +128,7 @@ empb <- function(
   
   list(
     res = res,
-    cov = cov_mat
+    cov = cov_mat,
+    data = data_out
   )
 }

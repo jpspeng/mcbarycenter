@@ -1,8 +1,8 @@
-\name{mcb}
-\alias{mcb}
+\name{mcbary}
+\alias{mcbary}
 \title{Monte Carlo Bootstrap for Quantile Estimation}
 \usage{
-mcb(
+mcbary(
   df,
   id_col = "id",
   val_col = "x",
@@ -13,6 +13,7 @@ mcb(
   alpha_grid = seq(0.01, 0.99, by = 0.01),
   use_midpoint = TRUE,
   estimate_first_last = TRUE,
+  use_isotonic = FALSE,
   weight_col = NULL,
   progress = TRUE,
   ci_level = 0.95,
@@ -42,6 +43,9 @@ adjacent thresholds.}
 
 \item{estimate_first_last}{Logical controlling endpoint treatment.}
 
+\item{use_isotonic}{Logical; if \code{TRUE}, apply isotonic regression to
+\code{res$estimate}, \code{res$ci_lo}, and \code{res$ci_hi}.}
+
 \item{weight_col}{Optional column name containing id-level weights.}
 
 \item{progress}{Logical; whether to display a bootstrap progress bar.}
@@ -53,8 +57,11 @@ adjacent thresholds.}
 \item{...}{Additional arguments passed to \code{\link{estimate_all_mixtures}}.}
 }
 \value{
-A data frame with columns \code{quantile}, \code{estimate}, \code{se},
-\code{ci_lo}, and \code{ci_hi}.
+A list with components \code{res}, \code{cov}, \code{mixtures},
+\code{method}, and \code{data}. \code{res} is a data frame with columns
+\code{quantile}, \code{estimate}, \code{se}, \code{ci_lo}, and
+\code{ci_hi}. \code{data} contains the original \code{id_col} and
+\code{val_col} columns from the input.
 }
 \description{
 Estimate quantile curves with Monte Carlo bootstrap uncertainty.

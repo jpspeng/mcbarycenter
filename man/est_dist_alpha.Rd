@@ -1,8 +1,8 @@
-\name{est_mean_alpha_quantile}
-\alias{est_mean_alpha_quantile}
-\title{Estimate Mean Alpha Quantiles from Mixture Distributions}
+\name{est_dist_alpha}
+\alias{est_dist_alpha}
+\title{Estimate the Distribution of an Alpha Quantile}
 \usage{
-est_mean_alpha_quantile(
+est_dist_alpha(
   mixture_res,
   alpha,
   use_midpoint = TRUE,
@@ -24,8 +24,9 @@ adjacent thresholds.}
 cumulative mixture curves across threshold values.}
 }
 \value{
-A numeric scalar giving the estimated mean alpha quantile.
+A data frame with columns \code{x}, \code{pmf}, and \code{cdf}.
 }
 \description{
-Estimate a mean alpha quantile from a sequence of mixture distributions.
+Estimate the distribution of an alpha quantile from a sequence of mixture
+distributions.
 }
