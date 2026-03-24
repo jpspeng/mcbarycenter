@@ -1,9 +1,9 @@
 #' Plot Estimated Quantiles with Optional Confidence Bands
 #'
 #' @param ... One or more result objects. Each may be either a data frame
-#'   containing `quantile`, `estimate`, `ci_lo`, and `ci_hi`, or a list with
-#'   a `res` data frame in that format, such as the output of [empbary()] or
-#'   [mcbary()].
+#'   containing `quantile` and `estimate`, and if `show_ci = TRUE`, also
+#'   `ci_lo` and `ci_hi`; or a list with a `res` data frame in that format,
+#'   such as the output of [empbary()] or [mcbary()].
 #' @param show_ci Logical; if TRUE (default), show confidence ribbons.
 #'
 #' @return A ggplot object.
@@ -11,7 +11,11 @@
 graph_quantiles <- function(..., show_ci = TRUE) {
   dfs <- list(...)
   arg_exprs <- as.list(substitute(list(...)))[-1]
-  required_cols <- c("quantile", "estimate", "ci_lo", "ci_hi")
+  required_cols <- c("quantile", "estimate")
+
+  if (show_ci) {
+    required_cols <- c(required_cols, "ci_lo", "ci_hi")
+  }
 
   as_quantile_df <- function(x, arg_label, required_cols) {
     if (is.list(x) && !is.data.frame(x) && "res" %in% names(x)) {

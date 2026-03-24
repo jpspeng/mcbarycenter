@@ -64,6 +64,29 @@ test_that("graph_quantiles validates required columns", {
   )
 })
 
+test_that("graph_quantiles allows missing confidence interval columns when disabled", {
+  df <- data.frame(
+    quantile = c(0, 0.5, 1),
+    estimate = c(1, 2, 3)
+  )
+
+  plot <- graph_quantiles(df, show_ci = FALSE)
+
+  expect_s3_class(plot, "ggplot")
+})
+
+test_that("graph_quantiles still requires confidence interval columns when enabled", {
+  df <- data.frame(
+    quantile = c(0, 0.5, 1),
+    estimate = c(1, 2, 3)
+  )
+
+  expect_error(
+    graph_quantiles(df, show_ci = TRUE),
+    "Argument 1 must contain `quantile`, `estimate`, `ci_lo`, `ci_hi`."
+  )
+})
+
 test_that("graph_mixtures returns a combined ggplot", {
   fit <- list(
     mixtures = list(
