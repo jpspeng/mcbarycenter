@@ -30,6 +30,6 @@ mcbary(sample_data,
     cutpoints = 20,
     bootstrap_samples = 20,
     use_midpoint = T,
-    estimate_first_last = F,
+    fix_endpoints = F,
     ci_method = "wald")
 ```

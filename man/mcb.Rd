@@ -12,7 +12,7 @@ mcbary(
   bootstrap_samples = 100,
   alpha_grid = seq(0.01, 0.99, by = 0.01),
   use_midpoint = TRUE,
-  estimate_first_last = TRUE,
+  fix_endpoints = TRUE,
   use_isotonic = FALSE,
   weight_col = NULL,
   progress = TRUE,
@@ -41,7 +41,7 @@ mcbary(
 \item{use_midpoint}{Logical; whether to use interval midpoints between
 adjacent thresholds.}
 
-\item{estimate_first_last}{Logical controlling endpoint treatment.}
+\item{fix_endpoints}{Logical controlling endpoint treatment.}
 
 \item{use_isotonic}{Logical; if \code{TRUE}, apply isotonic regression to
 \code{res$estimate}, \code{res$ci_lo}, and \code{res$ci_hi}.}

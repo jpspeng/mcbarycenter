@@ -1,8 +1,8 @@
-\name{quantile_graph}
-\alias{quantile_graph}
+\name{graph_quantiles}
+\alias{graph_quantiles}
 \title{Plot Estimated Quantiles with Confidence Bands}
 \usage{
-quantile_graph(df)
+graph_quantiles(df)
 }
 \arguments{
 \item{df}{A data frame containing \code{quantile}, \code{estimate}, \code{ci_lo}, and

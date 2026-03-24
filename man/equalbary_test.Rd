@@ -7,7 +7,7 @@ equalbary_test(
   bary_res2,
   B = 5000,
   seed = NULL,
-  variance_explained = NULL
+  variance_explained = 0.95
 )
 }
 \arguments{
@@ -21,9 +21,9 @@ equalbary_test(
 
 \item{seed}{Optional random seed.}
 
-\item{variance_explained}{Optional number in \code{(0, 1]} giving the target
-cumulative variance explained for PCA truncation in the Hotelling test. If
-\code{NULL} (default), no PCA truncation is applied.}
+\item{variance_explained}{Number in \code{(0, 1]} giving the target cumulative
+variance explained for PCA truncation in the Hotelling test. Defaults to
+\code{0.95}.}
 }
 \value{
 A list with components \code{sup_norm}, \code{int_sq_norm}, and

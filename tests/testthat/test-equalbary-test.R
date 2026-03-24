@@ -59,6 +59,38 @@ test_that("equalbary_test returns sup and integrated squared norm results", {
   expect_lte(out$hotelling$pval, 1)
 })
 
+test_that("equalbary_test uses PCA truncation by default", {
+  bary_res1 <- list(
+    res = data.frame(
+      quantile = c(0, 0.5, 1),
+      estimate = c(1, 2, 3)
+    ),
+    cov = diag(c(9, 1, 0)),
+    data = data.frame(
+      id = c("a", "a", "b", "b"),
+      val = c(1, 2, 3, 4)
+    )
+  )
+  
+  bary_res2 <- list(
+    res = data.frame(
+      quantile = c(0, 0.5, 1),
+      estimate = c(2, 1, 3)
+    ),
+    cov = matrix(0, nrow = 3, ncol = 3),
+    data = data.frame(
+      id = c("u", "u", "v", "v"),
+      val = c(1, 2, 3, 4)
+    )
+  )
+  
+  out <- equalbary_test(bary_res1, bary_res2, B = 10, seed = 1)
+  
+  expect_equal(out$hotelling$df, 2)
+  expect_equal(out$hotelling$n_components, 2)
+  expect_equal(out$hotelling$variance_explained, 1)
+})
+
 test_that("equalbary_test supports PCA truncation for the Hotelling test", {
   bary_res1 <- list(
     res = data.frame(

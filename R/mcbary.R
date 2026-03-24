@@ -206,7 +206,7 @@ est_all_quantiles <- function(mixture_res,
 #' @param alpha_grid Grid of target quantile levels.
 #' @param use_midpoint Logical; whether to use interval midpoints between
 #'   adjacent thresholds.
-#' @param estimate_first_last Logical controlling endpoint treatment.
+#' @param fix_endpoints Logical controlling endpoint treatment.
 #' @param use_isotonic Logical; if `TRUE`, apply isotonic regression to
 #'   `res$estimate`, `res$ci_lo`, and `res$ci_hi`.
 #' @param weight_col Optional column name containing id-level weights.
@@ -228,7 +228,7 @@ mcbary <- function(df,
                 bootstrap_samples = 100,
                 alpha_grid = seq(0.01, 0.99, by = 0.01),
                 use_midpoint = TRUE,
-                estimate_first_last = TRUE,
+                fix_endpoints = TRUE,
                 use_isotonic = FALSE,
                 weight_col = NULL,
                 progress = TRUE,
@@ -265,6 +265,11 @@ mcbary <- function(df,
     stop("`use_isotonic` must be a single TRUE/FALSE value.", call. = FALSE)
   }
   
+  if (!is.logical(fix_endpoints) || length(fix_endpoints) != 1L ||
+      is.na(fix_endpoints)) {
+    stop("`fix_endpoints` must be a single TRUE/FALSE value.", call. = FALSE)
+  }
+  
   if (!is.null(cutpoints)) {
     if (!is.numeric(cutpoints) || length(cutpoints) != 1 ||
         is.na(cutpoints) || cutpoints < 2) {
@@ -294,7 +299,7 @@ mcbary <- function(df,
     mixture_res = overall_mixture_res,
     alpha_grid = alpha_grid,
     use_midpoint = use_midpoint,
-    estimate_first_last = estimate_first_last
+    estimate_first_last = fix_endpoints
   )
   
   ids <- unique(df$id)
@@ -353,7 +358,7 @@ mcbary <- function(df,
       mixture_res = boot_mixture_res,
       alpha_grid = alpha_grid,
       use_midpoint = use_midpoint,
-      estimate_first_last = estimate_first_last
+      estimate_first_last = fix_endpoints
     )
     
     res_matrix[i, ] <- boot_quantile_res$estimate

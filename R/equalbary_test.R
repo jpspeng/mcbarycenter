@@ -9,9 +9,9 @@
 #'   `cov`.
 #' @param B Number of Gaussian simulations.
 #' @param seed Optional random seed.
-#' @param variance_explained Optional number in `(0, 1]` giving the target
-#'   cumulative variance explained for PCA truncation in the Hotelling test.
-#'   If `NULL` (default), no PCA truncation is applied.
+#' @param variance_explained Number in `(0, 1]` giving the target cumulative
+#'   variance explained for PCA truncation in the Hotelling test. Defaults to
+#'   `0.95`.
 #'
 #' @return A list with components `sup_norm`, `int_sq_norm`, and `hotelling`.
 #'   `sup_norm` and `int_sq_norm` each contain `pval`, `T_obs`, and `T_sim`.
@@ -22,7 +22,7 @@ equalbary_test <- function(bary_res1,
                            bary_res2,
                            B = 5000,
                            seed = NULL,
-                           variance_explained = NULL) {
+                           variance_explained = 0.95) {
   if (!is.null(seed)) {
     set.seed(seed)
   }
@@ -59,14 +59,13 @@ equalbary_test <- function(bary_res1,
     stop("`B` must be a single integer >= 1.", call. = FALSE)
   }
   
-  if (!is.null(variance_explained) &&
-      (!is.numeric(variance_explained) ||
-       length(variance_explained) != 1L ||
-       is.na(variance_explained) ||
-       variance_explained <= 0 ||
-       variance_explained > 1)) {
+  if (!is.numeric(variance_explained) ||
+      length(variance_explained) != 1L ||
+      is.na(variance_explained) ||
+      variance_explained <= 0 ||
+      variance_explained > 1) {
     stop(
-      "`variance_explained` must be `NULL` or a single numeric value in (0, 1].",
+      "`variance_explained` must be a single numeric value in (0, 1].",
       call. = FALSE
     )
   }
@@ -104,14 +103,10 @@ equalbary_test <- function(bary_res1,
     )
   }
   
-  if (is.null(variance_explained)) {
-    keep_idx <- which(keep_positive)
-  } else {
-    positive_values <- cov_diff_eig$values[keep_positive]
-    cumulative_share <- cumsum(positive_values) / sum(positive_values)
-    n_keep <- which(cumulative_share >= variance_explained)[1]
-    keep_idx <- which(keep_positive)[seq_len(n_keep)]
-  }
+  positive_values <- cov_diff_eig$values[keep_positive]
+  cumulative_share <- cumsum(positive_values) / sum(positive_values)
+  n_keep <- which(cumulative_share >= variance_explained)[1]
+  keep_idx <- which(keep_positive)[seq_len(n_keep)]
   
   eigvec_keep <- cov_diff_eig$vectors[, keep_idx, drop = FALSE]
   eigval_keep <- cov_diff_eig$values[keep_idx]

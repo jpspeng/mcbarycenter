@@ -8,7 +8,7 @@
 #'
 #' @return A ggplot object.
 #' @export
-quantile_graph <- function(..., show_ci = TRUE) {
+graph_quantiles <- function(..., show_ci = TRUE) {
   dfs <- list(...)
   arg_exprs <- as.list(substitute(list(...)))[-1]
   required_cols <- c("quantile", "estimate", "ci_lo", "ci_hi")
@@ -96,8 +96,8 @@ quantile_graph <- function(..., show_ci = TRUE) {
     ggplot2::labs(
       x = "Quantile",
       y = "Quantile level",
-      color = "Series",
-      fill = "Series"
+      color = NULL,
+      fill = NULL
     )
   
   if (show_ci) {
@@ -122,11 +122,16 @@ quantile_graph <- function(..., show_ci = TRUE) {
 #'   output of [mcbary()].
 #' @param layout Either `"combined"` to plot all mixing distributions on one
 #'   graph, or `"individual"` to return one graph per mixing distribution.
+#' @param show_all Logical; if `TRUE`, show all mixing distributions. If
+#'   `FALSE` (default) and there are more than 10, plot an approximately evenly
+#'   spaced subset of 10.
 #'
 #' @return If `layout = "combined"`, a ggplot object. If
 #'   `layout = "individual"`, a named list of ggplot objects.
 #' @export
-graph_mixtures <- function(mcb_res, layout = c("combined", "individual")) {
+graph_mixtures <- function(mcb_res,
+                           layout = c("combined", "individual"),
+                           show_all = FALSE) {
   layout <- match.arg(layout)
   
   if (!is.list(mcb_res) || is.null(mcb_res$mixtures)) {
@@ -140,6 +145,10 @@ graph_mixtures <- function(mcb_res, layout = c("combined", "individual")) {
   
   if (!is.list(mixtures) || length(mixtures) == 0) {
     stop("`mcb_res$mixtures` must be a non-empty list.", call. = FALSE)
+  }
+  
+  if (!is.logical(show_all) || length(show_all) != 1L || is.na(show_all)) {
+    stop("`show_all` must be a single TRUE/FALSE value.", call. = FALSE)
   }
   
   mixture_names <- names(mixtures)
@@ -158,6 +167,12 @@ graph_mixtures <- function(mcb_res, layout = c("combined", "individual")) {
         call. = FALSE
       )
     }
+  }
+  
+  if (!show_all && length(mixtures) > 10) {
+    keep_idx <- unique(round(seq(1, length(mixtures), length.out = 10)))
+    mixtures <- mixtures[keep_idx]
+    mixture_names <- mixture_names[keep_idx]
   }
   
   if (layout == "combined") {
@@ -179,8 +194,8 @@ graph_mixtures <- function(mcb_res, layout = c("combined", "individual")) {
       ) +
         ggplot2::geom_line() +
         ggplot2::labs(
-          x = "theta",
-          y = "cumul",
+          x = "alpha",
+          y = "cdf",
           color = "Mixture"
         )
     )
@@ -194,8 +209,8 @@ graph_mixtures <- function(mcb_res, layout = c("combined", "individual")) {
     ) +
       ggplot2::geom_line() +
       ggplot2::labs(
-        x = "theta",
-        y = "cumul",
+        x = "alpha",
+        y = "cdf",
         title = paste0("X_0: ", mixture_names[i])
       )
   })
