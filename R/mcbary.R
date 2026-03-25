@@ -218,9 +218,10 @@ est_all_quantiles <- function(mixture_res,
 #' @param ... Additional arguments passed to [estimate_all_mixtures()].
 #'
 #' @return A list with components `res`, `cov`, `mixtures`, `method`, and
-#'   `data`. `res` is a data frame with columns `quantile`, `estimate`, `se`,
-#'   `ci_lo`, and `ci_hi`. `data` contains the original `id_col` and `val_col`
-#'   columns from the input.
+#'   `data`. `res` is a data frame with columns `quantile`, `estimate`,
+#'   `estimate_bs`, `se`, `ci_lo`, `ci_hi`, `pct_ci_lo`, and `pct_ci_hi`.
+#'   `data` contains the original `id_col` and `val_col` columns from the
+#'   input.
 #' @export
 mcbary <- function(df,
                 id_col = "id",

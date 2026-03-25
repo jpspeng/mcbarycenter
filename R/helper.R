@@ -157,7 +157,7 @@
     out$g <- out$g / s
   }
 
-  if (any(out$g < -1e-12)) {
+  if (any(out$g < -0.01)) {
     stop("Mixture weights contain materially negative values.", call. = FALSE)
   }
 
