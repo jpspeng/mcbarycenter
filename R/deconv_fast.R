@@ -22,6 +22,9 @@
 #' @param pDegree Degrees of freedom for the natural spline basis.
 #' @param aStart Initial value for the optimizer. A scalar is recycled to the
 #'   number of columns of `Q`.
+#' @param obs_weights Optional observation weights. For Poisson and Normal this
+#'   should have length `nrow(P)` after construction; for Binomial it should
+#'   have length equal to the number of rows of `X` (or of supplied `logP`).
 #' @param ... Additional arguments passed to [stats::nlm()].
 #'
 #' @return A list containing the optimizer output, working matrices, covariance
@@ -30,12 +33,40 @@
 deconv_fast <- function(tau, X, y, Q, P, n = 40,
                         family = c("Poisson", "Normal", "Binomial"),
                         ignoreZero = TRUE, deltaAt = NULL, c0 = 1,
-                        scale = TRUE, pDegree = 5, aStart = 1.0, ...) {
+                        scale = TRUE, pDegree = 5, aStart = 1.0,
+                        obs_weights = NULL, ...) {
 
   family <- match.arg(family)
   if (!is.null(deltaAt) && (family != "Normal")) {
     stop("deltaAt applies only to Normal.", call. = FALSE)
   }
+  
+  softmax <- function(z) {
+    zmax <- max(z)
+    ez <- exp(z - zmax)
+    ez / sum(ez)
+  }
+  
+  logsoftmax <- function(z) {
+    zmax <- max(z)
+    zz <- z - zmax
+    zz - log(sum(exp(zz)))
+  }
+  
+  logsumexp <- function(v) {
+    vmax <- max(v)
+    vmax + log(sum(exp(v - vmax)))
+  }
+  
+  y_vec_make <- function(y, nrow_p) {
+    if (length(y) == 1L && y == 1) {
+      rep(1.0, nrow_p)
+    } else {
+      as.numeric(y)
+    }
+  }
+  
+  logP <- NULL
 
   if (missing(Q) && missing(P)) {
     if (missing(tau)) {
@@ -68,6 +99,10 @@ deconv_fast <- function(tau, X, y, Q, P, n = 40,
       }
       Q <- cbind(1.0, Q1)
       Q <- sweep(Q, 2, sqrt(colSums(Q * Q)), "/")
+      
+      if (is.null(obs_weights)) {
+        obs_weights <- rep(1.0, nrow(P))
+      }
 
     } else if (family == "Normal") {
       r <- round(range(X), 1)
@@ -94,6 +129,10 @@ deconv_fast <- function(tau, X, y, Q, P, n = 40,
       } else {
         Q <- Q1
       }
+      
+      if (is.null(obs_weights)) {
+        obs_weights <- rep(1.0, nrow(P))
+      }
 
     } else {
       if (is.data.frame(X)) {
@@ -107,17 +146,23 @@ deconv_fast <- function(tau, X, y, Q, P, n = 40,
       }
       storage.mode(X) <- "double"
 
-      P <- vapply(
+      logP <- vapply(
         tau,
-        function(w) stats::dbinom(X[, 2], size = X[, 1], prob = w),
+        function(w) stats::dbinom(X[, 2], size = X[, 1], prob = w, log = TRUE),
         numeric(nrow(X))
       )
+      logP <- as.matrix(logP)
+      P <- matrix(NA_real_, nrow = nrow(logP), ncol = ncol(logP))
       y <- 1
 
       Q <- splines::ns(tau, pDegree)
       if (scale) {
         Q <- scale(Q, center = TRUE, scale = FALSE)
         Q <- sweep(Q, 2, sqrt(colSums(Q * Q)), "/")
+      }
+      
+      if (is.null(obs_weights)) {
+        obs_weights <- rep(1.0, nrow(logP))
       }
     }
   } else {
@@ -126,6 +171,25 @@ deconv_fast <- function(tau, X, y, Q, P, n = 40,
         call. = FALSE
       )
     }
+    
+    if (family == "Binomial") {
+      logP <- as.matrix(P)
+      storage.mode(logP) <- "double"
+      P <- matrix(NA_real_, nrow = nrow(logP), ncol = ncol(logP))
+      if (is.null(obs_weights)) {
+        obs_weights <- rep(1.0, nrow(logP))
+      }
+    } else if (is.null(obs_weights)) {
+      obs_weights <- rep(1.0, nrow(P))
+    }
+  }
+  
+  Q <- as.matrix(Q)
+  storage.mode(Q) <- "double"
+  
+  if (family != "Binomial") {
+    P <- as.matrix(P)
+    storage.mode(P) <- "double"
   }
 
   p <- ncol(Q)
@@ -135,19 +199,22 @@ deconv_fast <- function(tau, X, y, Q, P, n = 40,
   if (length(aStart) != p) {
     stop("`aStart` has wrong length.", call. = FALSE)
   }
-
-  softmax <- function(z) {
-    zmax <- max(z)
-    ez <- exp(z - zmax)
-    ez / sum(ez)
-  }
-
-  y_vec_make <- function(y, nrow_p) {
-    if (length(y) == 1L && y == 1) {
-      rep(1.0, nrow_p)
-    } else {
-      as.numeric(y)
+  
+  obs_weights <- as.numeric(obs_weights)
+  if (family == "Binomial") {
+    if (length(obs_weights) != nrow(logP)) {
+      stop(
+        "`obs_weights` must have length equal to the number of Binomial observations.",
+        call. = FALSE
+      )
     }
+  } else if (length(obs_weights) != nrow(P)) {
+    stop("`obs_weights` must have length `nrow(P)`.", call. = FALSE)
+  }
+  if (anyNA(obs_weights) || any(obs_weights < 0)) {
+    stop("`obs_weights` must be a non-missing, non-negative numeric vector.",
+      call. = FALSE
+    )
   }
 
   penalty_grad <- function(a) {
@@ -171,14 +238,28 @@ deconv_fast <- function(tau, X, y, Q, P, n = 40,
   loglik <- function(a) {
     Qa <- as.vector(Q %*% a)
     g <- softmax(Qa)
-    f <- as.vector(P %*% g)
-    f <- pmax(f, 1e-300)
-    yv <- y_vec_make(y, nrow(P))
+    if (family == "Binomial") {
+      logg <- logsoftmax(Qa)
+      logf <- apply(logP, 1, function(row) logsumexp(row + logg))
+      yv <- y_vec_make(y, nrow(logP))
+      wy <- obs_weights * yv
+      val <- -sum(wy * logf) + c0 * sqrt(sum(a * a))
 
-    val <- -sum(yv * log(f)) + c0 * sqrt(sum(a * a))
+      R <- exp(logP - logf)
+      u <- as.vector(crossprod(R, wy))
+      sy <- sum(wy)
+    } else {
+      f <- as.vector(P %*% g)
+      f <- pmax(f, 1e-300)
+      yv <- y_vec_make(y, nrow(P))
+      wy <- obs_weights * yv
 
-    u <- as.vector(t(P) %*% (yv / f))
-    sy <- sum(yv)
+      val <- -sum(wy * log(f)) + c0 * sqrt(sum(a * a))
+
+      u <- as.vector(t(P) %*% (wy / f))
+      sy <- sum(wy)
+    }
+
     v <- g * (u - sy)
     grad <- -as.vector(crossprod(Q, v)) + penalty_grad(a)
 
@@ -192,13 +273,21 @@ deconv_fast <- function(tau, X, y, Q, P, n = 40,
   stats_function <- function(a) {
     g <- softmax(as.vector(Q %*% a))
     G <- cumsum(g)
-    f <- as.vector(P %*% g)
-    f <- pmax(f, 1e-300)
-
-    y_hat <- if (length(y) == 1L && y == 1) rep(1.0, length(f)) else sum(y) * f
-
-    Pt <- sweep(P, 1, f, "/")
-    W <- sweep(t(Pt), 1, g, "*") - g %o% rep(1.0, nrow(P))
+    if (family == "Binomial") {
+      logg <- logsoftmax(as.vector(Q %*% a))
+      logf <- apply(logP, 1, function(row) logsumexp(row + logg))
+      f <- exp(logf)
+      Pt <- exp(logP - logf)
+      y_hat <- obs_weights
+      W <- sweep(t(Pt), 1, g, "*") - g %o% rep(1.0, nrow(logP))
+    } else {
+      f <- as.vector(P %*% g)
+      f <- pmax(f, 1e-300)
+      yv <- y_vec_make(y, nrow(P))
+      y_hat <- sum(obs_weights * yv) * f
+      Pt <- sweep(P, 1, f, "/")
+      W <- sweep(t(Pt), 1, g, "*") - g %o% rep(1.0, nrow(P))
+    }
 
     qw <- crossprod(Q, W)
     ywq <- (sweep(t(W), 1, y_hat, "*")) %*% Q
@@ -251,7 +340,8 @@ deconv_fast <- function(tau, X, y, Q, P, n = 40,
   list(
     mle = mle,
     Q = Q,
-    P = P,
+    P = if (family == "Binomial") NULL else P,
+    logP = if (family == "Binomial") logP else NULL,
     S = stats$S,
     cov = stats$cov,
     cov.g = stats$cov.g,

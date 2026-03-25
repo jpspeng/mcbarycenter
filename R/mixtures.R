@@ -7,7 +7,7 @@
 #' @param tau Support grid for the estimated mixture.
 #' @param pDegree Degrees of freedom for the spline basis in [deconv_fast()].
 #' @param c0 Penalty constant passed to [deconv_fast()].
-#' @param weight_col Optional weight column name. Not supported for this method.
+#' @param weight_col Optional column name containing id-level weights.
 #'
 #' @return A standardized mixture data frame with columns `theta`, `g`, and
 #'   `cumul`.
@@ -20,22 +20,23 @@ estimate_mixture_efron <- function(df,
                                    pDegree = 7,
                                    c0 = 1,
                                    weight_col = NULL) {
-  if (!is.null(weight_col)) {
-    stop("`weight_col` is not supported for method = 'spline'.", call. = FALSE)
-  }
-
   tau <- sort(unique(as.numeric(tau)))
 
   if (anyNA(tau) || any(tau < 0 | tau > 1)) {
     stop("`tau` must be numeric and lie in [0, 1].", call. = FALSE)
   }
 
-  df <- .standardize_input_df(df, id_col = id_col, val_col = val_col)
+  df <- .standardize_input_df(
+    df,
+    id_col = id_col,
+    val_col = val_col,
+    weight_col = weight_col
+  )
 
   df_bin <- .aggregate_binomial_data(
     df = df,
     x_thresh = x_thresh,
-    weight_col = NULL
+    weight_col = weight_col
   )
 
   x_input <- dplyr::select(df_bin, n, s)
@@ -44,7 +45,8 @@ estimate_mixture_efron <- function(df,
     X = x_input,
     family = "Binomial",
     pDegree = pDegree,
-    c0 = c0
+    c0 = c0,
+    obs_weights = if (is.null(weight_col)) NULL else df_bin$weight
   )
 
   stats_df <- data.frame(result$stats)
@@ -362,13 +364,6 @@ estimate_all_mixtures <- function(df,
     weight_col = weight_col
   )
 
-  if (!is.null(weight_col) && method %in% c("spline")) {
-    stop(
-      "`weight_col` is only supported for methods 'npmle', 'raw', and 'beta'.",
-      call. = FALSE
-    )
-  }
-
   df$id <- factor(df$id)
 
   res_list <- list()
@@ -388,6 +383,7 @@ estimate_all_mixtures <- function(df,
           id_col = "id",
           val_col = "x",
           x_thresh = x_thresh,
+          weight_col = weight_col,
           ...
         ),
         npmle = estimate_mixture_npmle(

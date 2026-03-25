@@ -104,6 +104,7 @@ est_dist_alpha <- function(mixture_res,
   delta_sum <- sum(delta_df$delta)
   
   if (!is.finite(delta_sum) || delta_sum <= 0) {
+    print(delta_df)
     stop(
       "Computed quantile weights are not positive; cannot form mean alpha quantile.",
       call. = FALSE
@@ -200,8 +201,10 @@ est_all_quantiles <- function(mixture_res,
 #' @param id_col Column name identifying groups. Defaults to `"id"`.
 #' @param val_col Column name containing the observed values. Defaults to `"x"`.
 #' @param method Mixture estimation method.
-#' @param x_grid Threshold grid used when `cutpoints` is `NULL`.
-#' @param cutpoints Optional number of evenly spaced thresholds.
+#' @param x_grid Threshold grid used when `cutpoints` is `NULL`. Must be
+#'   supplied if `cutpoints` is `NULL`.
+#' @param cutpoints Optional number of evenly spaced thresholds. Either
+#'   `cutpoints` or `x_grid` must be supplied.
 #' @param bootstrap_samples Number of bootstrap resamples.
 #' @param alpha_grid Grid of target quantile levels.
 #' @param use_midpoint Logical; whether to use interval midpoints between
@@ -223,7 +226,7 @@ mcbary <- function(df,
                 id_col = "id",
                 val_col = "x",
                 method = c("spline", "npmle", "raw", "beta"),
-                x_grid = 1:10,
+                x_grid = NULL,
                 cutpoints = NULL,
                 bootstrap_samples = 100,
                 alpha_grid = seq(0.01, 0.99, by = 0.01),
@@ -269,6 +272,13 @@ mcbary <- function(df,
       is.na(estimate_endpoints)) {
     stop(
       "`estimate_endpoints` must be a single TRUE/FALSE value.",
+      call. = FALSE
+    )
+  }
+  
+  if (is.null(cutpoints) && is.null(x_grid)) {
+    stop(
+      "Either `cutpoints` or `x_grid` must be supplied.",
       call. = FALSE
     )
   }

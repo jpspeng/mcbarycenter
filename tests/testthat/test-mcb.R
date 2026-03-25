@@ -105,6 +105,28 @@ test_that("mcbary can isotonicize estimate and confidence bounds", {
   expect_true(all(diff(fit$res$ci_hi) >= 0))
 })
 
+test_that("mcbary requires cutpoints or x_grid", {
+  input <- data.frame(
+    id = c(1, 1, 2, 2),
+    value = c(1, 2, 3, 4)
+  )
+
+  expect_error(
+    mcbary(
+      df = input,
+      id_col = "id",
+      val_col = "value",
+      method = "raw",
+      x_grid = NULL,
+      cutpoints = NULL,
+      bootstrap_samples = 2,
+      alpha_grid = c(0.25, 0.75),
+      progress = FALSE
+    ),
+    "Either `cutpoints` or `x_grid` must be supplied."
+  )
+})
+
 test_that("est_dist_alpha returns x, pmf, and cdf and matches mean helper", {
   mixture_res <- list(
     "1" = data.frame(theta = c(0, 0.5, 1), g = c(0.2, 0.3, 0.5), cumul = c(0.2, 0.5, 1)),

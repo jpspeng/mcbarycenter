@@ -8,7 +8,7 @@ estimate_mixture_efron(
   val_col = "x",
   x_thresh,
   tau = seq(from = 0.005, to = 0.995, by = 0.005),
-  pDegree = 20,
+  pDegree = 7,
   c0 = 1,
   weight_col = NULL
 )
@@ -28,7 +28,7 @@ estimate_mixture_efron(
 
 \item{c0}{Penalty constant passed to \code{\link{deconv_fast}}.}
 
-\item{weight_col}{Optional weight column name. Not supported for this method.}
+\item{weight_col}{Optional column name containing id-level weights.}
 }
 \value{
 A standardized mixture data frame with columns \code{theta}, \code{g}, and

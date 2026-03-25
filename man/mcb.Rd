@@ -7,7 +7,7 @@ mcbary(
   id_col = "id",
   val_col = "x",
   method = c("spline", "npmle", "raw", "beta"),
-  x_grid = 1:10,
+  x_grid = NULL,
   cutpoints = NULL,
   bootstrap_samples = 100,
   alpha_grid = seq(0.01, 0.99, by = 0.01),
@@ -30,9 +30,11 @@ mcbary(
 
 \item{method}{Mixture estimation method.}
 
-\item{x_grid}{Threshold grid used when \code{cutpoints} is \code{NULL}.}
+\item{x_grid}{Threshold grid used when \code{cutpoints} is \code{NULL}. Must be
+supplied if \code{cutpoints} is \code{NULL}.}
 
-\item{cutpoints}{Optional number of evenly spaced thresholds.}
+\item{cutpoints}{Optional number of evenly spaced thresholds. Either
+\code{cutpoints} or \code{x_grid} must be supplied.}
 
 \item{bootstrap_samples}{Number of bootstrap resamples.}
 

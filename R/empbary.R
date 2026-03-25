@@ -6,10 +6,12 @@
 #' @param df A data frame.
 #' @param id_col A string giving the column name that identifies groups.
 #' @param val_col A string giving the column name containing numeric values.
+#' @param weight_col A string giving the column name containing group weights.
+#'   Defaults to `NULL`, in which case the empirical barycenter is unweighted.
 #' @param alpha_grid A numeric vector of probabilities passed to [stats::quantile()].
 #'   Defaults to `seq(0.01, 0.99, 0.01)`.
 #' @param quantile_type The `type` argument passed to [stats::quantile()].
-#'   Defaults to `3`.
+#'   Defaults to `1`.
 #'
 #' @return A list with:
 #' \describe{
@@ -17,14 +19,15 @@
 #'   `ci_lo`, and `ci_hi`.}
 #'   \item{cov}{An estimated covariance matrix for the quantile barycenter
 #'   estimator, of dimension `length(alpha_grid) x length(alpha_grid)`.}
-#'   \item{data}{The original input reduced to standardized `id` and `val`
-#'   columns.}
+#'   \item{data}{The original input reduced to standardized `id`, `val`, and
+#'   optional `weight` columns.}
 #' }
 #' @export
 empbary <- function(
     df,
     id_col,
     val_col,
+    weight_col = NULL,
     alpha_grid = seq(0.01, 0.99, 0.01),
     quantile_type = 1
 ) {
@@ -48,6 +51,20 @@ empbary <- function(
     stop("`val_col` must name a column in `df`.", call. = FALSE)
   }
   
+  if (!is.null(weight_col)) {
+    if (!is.character(weight_col) || length(weight_col) != 1L || !nzchar(weight_col)) {
+      stop("`weight_col` must be `NULL` or a single non-empty string.", call. = FALSE)
+    }
+    
+    if (!weight_col %in% names(df)) {
+      stop("`weight_col` must name a column in `df`.", call. = FALSE)
+    }
+    
+    if (!is.numeric(df[[weight_col]])) {
+      stop("`weight_col` must refer to a numeric column.", call. = FALSE)
+    }
+  }
+  
   if (!is.numeric(df[[val_col]])) {
     stop("`val_col` must refer to a numeric column.", call. = FALSE)
   }
@@ -56,6 +73,10 @@ empbary <- function(
     id = df[[id_col]],
     val = df[[val_col]]
   )
+  
+  if (!is.null(weight_col)) {
+    data_out$weight <- df[[weight_col]]
+  }
   
   if (!is.numeric(alpha_grid) || length(alpha_grid) == 0L || anyNA(alpha_grid)) {
     stop(
@@ -83,6 +104,50 @@ empbary <- function(
     )
   }
   
+  if (is.null(weight_col)) {
+    group_weights <- rep(1, length(split_vals))
+    names(group_weights) <- names(split_vals)
+  } else {
+    split_weights <- split(df[[weight_col]], df[[id_col]])
+    invalid_weights <- vapply(
+      split_weights,
+      FUN.VALUE = logical(1),
+      FUN = function(weights) {
+        anyNA(weights) || length(unique(weights)) != 1L
+      }
+    )
+    
+    if (any(invalid_weights)) {
+      bad_ids <- names(split_weights)[invalid_weights]
+      stop(
+        paste0(
+          "`weight_col` must be non-missing and homogeneous within each `id`. ",
+          "Problematic ids: ",
+          paste(bad_ids, collapse = ", "),
+          "."
+        ),
+        call. = FALSE
+      )
+    }
+    
+    group_weights <- vapply(
+      split_weights[names(split_vals)],
+      FUN.VALUE = numeric(1),
+      FUN = function(weights) weights[[1]]
+    )
+    
+    if (any(group_weights < 0)) {
+      stop("`weight_col` must contain non-negative weights.", call. = FALSE)
+    }
+    
+    if (all(group_weights == 0)) {
+      stop(
+        "`weight_col` must contain at least one positive weight among retained groups.",
+        call. = FALSE
+      )
+    }
+  }
+  
   quantile_matrix <- vapply(
     split_vals,
     FUN.VALUE = numeric(length(alpha_grid)),
@@ -101,10 +166,17 @@ empbary <- function(
   }
   
   n_groups <- ncol(quantile_matrix)
-  estimate <- rowMeans(quantile_matrix)
+  normalized_weights <- group_weights / sum(group_weights)
+  estimate <- as.vector(quantile_matrix %*% normalized_weights)
   
-  if (n_groups > 1L) {
-    cov_mat <- stats::cov(t(quantile_matrix)) / n_groups
+  if (n_groups > 1L && sum(normalized_weights > 0) > 1L) {
+    centered_matrix <- sweep(quantile_matrix, 1L, estimate, FUN = "-")
+    weight_sum_sq <- sum(normalized_weights^2)
+    cov_mat <- (
+      centered_matrix %*%
+        diag(normalized_weights, nrow = length(normalized_weights)) %*%
+        t(centered_matrix)
+    ) * (weight_sum_sq / (1 - weight_sum_sq))
     se <- sqrt(diag(cov_mat))
   } else {
     cov_mat <- matrix(

@@ -6,6 +6,7 @@ empbary(
   df,
   id_col,
   val_col,
+  weight_col = NULL,
   alpha_grid = seq(0.01, 0.99, 0.01),
   quantile_type = 1
 )
@@ -17,6 +18,9 @@ empbary(
 
 \item{val_col}{A string giving the column name containing numeric values.}
 
+\item{weight_col}{A string giving the column name containing group weights.
+Defaults to \code{NULL}, in which case the empirical barycenter is unweighted.}
+
 \item{alpha_grid}{A numeric vector of probabilities passed to \code{\link[stats:quantile]{quantile()}}.
 Defaults to \code{seq(0.01, 0.99, 0.01)}.}
 
@@ -27,7 +31,7 @@ Defaults to \code{1}.}
 A list with components \code{res}, \code{cov}, and \code{data}. \code{res}
 is a data frame with columns \code{quantile}, \code{estimate}, \code{se},
 \code{ci_lo}, and \code{ci_hi}. \code{data} contains standardized
-\code{id} and \code{val} columns from the input.
+\code{id}, \code{val}, and optional \code{weight} columns from the input.
 }
 \description{
 Computes group-specific empirical quantiles over a shared grid and then

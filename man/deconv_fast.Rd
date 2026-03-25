@@ -16,6 +16,7 @@ deconv_fast(
   scale = TRUE,
   pDegree = 5,
   aStart = 1,
+  obs_weights = NULL,
   ...
 )
 }
@@ -50,6 +51,11 @@ positive counts.}
 
 \item{aStart}{Initial value for the optimizer. A scalar is recycled to the
 number of columns of \code{Q}.}
+
+\item{obs_weights}{Optional observation weights. For Poisson and Normal this
+should have length \code{nrow(P)} after construction; for Binomial it should
+have length equal to the number of rows of \code{X} (or of supplied
+\code{logP}).}
 
 \item{...}{Additional arguments passed to \code{\link[stats:nlm]{nlm()}}.}
 }
