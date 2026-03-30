@@ -307,7 +307,7 @@ mcbary <- function(df,
 
   use_precomputed_grid <- is.null(cutpoints)
 
-  if (use_precomputed_grid) {
+  if (use_precomputed_grid && identical(bootstrap_type, "cluster")) {
     precomputed_grid <- .precompute_binomial_grid(
       df = df,
       x_grid = x_grid_overall,
@@ -316,6 +316,18 @@ mcbary <- function(df,
 
     overall_mixture_res <- .estimate_all_mixtures_from_precomputed(
       precomputed = precomputed_grid,
+      method = method,
+      ...
+    )
+  } else if (use_precomputed_grid && identical(bootstrap_type, "two_stage")) {
+    precomputed_two_stage <- .precompute_threshold_bin_counts(
+      df = df,
+      x_grid = x_grid_overall,
+      weight_col = weight_col
+    )
+
+    overall_mixture_res <- .estimate_all_mixtures_from_precomputed(
+      precomputed = precomputed_two_stage,
       method = method,
       ...
     )
@@ -340,6 +352,8 @@ mcbary <- function(df,
   
   if (use_precomputed_grid && identical(bootstrap_type, "cluster")) {
     n_ids <- length(precomputed_grid$n)
+  } else if (use_precomputed_grid && identical(bootstrap_type, "two_stage")) {
+    n_ids <- length(precomputed_two_stage$n)
   } else {
     ids <- unique(df$id)
     by_id <- split(df, df$id)
@@ -370,6 +384,18 @@ mcbary <- function(df,
       sampled_idx <- sample.int(n_ids, size = n_ids, replace = TRUE)
       boot_precomputed <- .resample_precomputed_binomial_grid(
         precomputed = precomputed_grid,
+        sampled_idx = sampled_idx
+      )
+
+      boot_mixture_res <- .estimate_all_mixtures_for_bootstrap(
+        precomputed = boot_precomputed,
+        method = method,
+        ...
+      )
+    } else if (use_precomputed_grid && identical(bootstrap_type, "two_stage")) {
+      sampled_idx <- sample.int(n_ids, size = n_ids, replace = TRUE)
+      boot_precomputed <- .resample_two_stage_precomputed_grid(
+        precomputed = precomputed_two_stage,
         sampled_idx = sampled_idx
       )
 

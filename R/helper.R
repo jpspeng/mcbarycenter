@@ -228,6 +228,99 @@
   out
 }
 
+.precompute_threshold_bin_counts <- function(df, x_grid, weight_col = NULL) {
+  .validate_input_df(df, required_cols = c("id", "x"), weight_col = weight_col)
+  .validate_id_weights(df, weight_col)
+
+  x_grid <- sort(unique(as.numeric(x_grid)))
+
+  if (length(x_grid) == 0 || anyNA(x_grid)) {
+    stop("`x_grid` must be a non-empty numeric vector with no NA.", call. = FALSE)
+  }
+
+  df$id <- factor(df$id)
+  ids <- levels(df$id)
+  n_ids <- length(ids)
+  n_bins <- length(x_grid) + 1L
+
+  bin_idx <- cut(
+    df$x,
+    breaks = c(-Inf, x_grid, Inf),
+    right = TRUE,
+    include.lowest = TRUE,
+    labels = FALSE
+  )
+
+  counts_mat <- matrix(0L, nrow = n_ids, ncol = n_bins)
+  split_bins <- split(bin_idx, df$id, drop = TRUE)
+
+  for (i in seq_along(split_bins)) {
+    counts_mat[i, ] <- tabulate(split_bins[[i]], nbins = n_bins)
+  }
+
+  s_mat <- t(apply(counts_mat[, seq_along(x_grid), drop = FALSE], 1, cumsum))
+
+  weights <- NULL
+  if (!is.null(weight_col)) {
+    weight_df <- dplyr::group_by(df, id)
+    weight_df <- dplyr::summarise(
+      weight_df,
+      weight = dplyr::first(.data[[weight_col]]),
+      .groups = "drop"
+    )
+    weights <- weight_df$weight[match(ids, weight_df$id)]
+  }
+
+  list(
+    x_grid = x_grid,
+    ids = ids,
+    n = rowSums(counts_mat),
+    s = s_mat,
+    bin_counts = counts_mat,
+    weight = weights
+  )
+}
+
+.resample_two_stage_precomputed_grid <- function(precomputed, sampled_idx) {
+  if (!is.list(precomputed) ||
+      !all(c("x_grid", "n", "bin_counts") %in% names(precomputed))) {
+    stop(
+      paste(
+        "`precomputed` must be a threshold bin object from",
+        "`.precompute_threshold_bin_counts()`."
+      ),
+      call. = FALSE
+    )
+  }
+
+  sampled_idx <- as.integer(sampled_idx)
+
+  if (length(sampled_idx) == 0 || anyNA(sampled_idx) ||
+      any(sampled_idx < 1 | sampled_idx > length(precomputed$n))) {
+    stop("`sampled_idx` contains invalid row indices.", call. = FALSE)
+  }
+
+  n_boot <- length(sampled_idx)
+  n_thresh <- length(precomputed$x_grid)
+  s_boot <- matrix(0L, nrow = n_boot, ncol = n_thresh)
+
+  for (i in seq_len(n_boot)) {
+    idx <- sampled_idx[i]
+    n_i <- precomputed$n[idx]
+    probs_i <- precomputed$bin_counts[idx, ] / n_i
+    boot_bins <- as.vector(stats::rmultinom(1, size = n_i, prob = probs_i))
+    s_boot[i, ] <- cumsum(boot_bins[seq_len(n_thresh)])
+  }
+
+  list(
+    x_grid = precomputed$x_grid,
+    ids = as.character(seq_len(n_boot)),
+    n = precomputed$n[sampled_idx],
+    s = s_boot,
+    weight = if (is.null(precomputed$weight)) NULL else precomputed$weight[sampled_idx]
+  )
+}
+
 .standardize_mixture_df <- function(theta,
                                     g,
                                     sort_theta = TRUE,
