@@ -39,19 +39,12 @@ estimate_mixture_efron <- function(df,
     weight_col = weight_col
   )
 
-  x_input <- dplyr::select(df_bin, n, s)
-  result <- deconv_fast(
+  .estimate_mixture_efron_from_binomial(
+    df_bin = df_bin,
     tau = tau,
-    X = x_input,
-    family = "Binomial",
     pDegree = pDegree,
-    c0 = c0,
-    obs_weights = if (is.null(weight_col)) NULL else df_bin$weight
+    c0 = c0
   )
-
-  stats_df <- data.frame(result$stats)
-
-  .standardize_mixture_df(theta = stats_df$theta, g = stats_df$g)
 }
 
 #' Estimate a Mixture via NPMLE
@@ -99,107 +92,14 @@ estimate_mixture_npmle <- function(df,
     x_thresh = x_thresh,
     weight_col = weight_col
   )
-  
-  fit_g <- switch(
-    backend,
-    
-    mixsqp = {
-      if (is.null(mixsqp_control$verbose)) {
-        mixsqp_control$verbose <- FALSE
-      }
-      
-      logL <- outer(
-        X = seq_len(nrow(df_bin)),
-        Y = seq_along(tau),
-        FUN = Vectorize(function(i, j) {
-          stats::dbinom(
-            x = df_bin$s[i],
-            size = df_bin$n[i],
-            prob = tau[j],
-            log = TRUE
-          )
-        })
-      )
-      
-      fit <- if (is.null(weight_col)) {
-        do.call(
-          mixsqp::mixsqp,
-          list(
-            L = logL,
-            log = TRUE,
-            control = mixsqp_control
-          )
-        )
-      } else {
-        do.call(
-          mixsqp::mixsqp,
-          list(
-            L = logL,
-            w = df_bin$weight,
-            log = TRUE,
-            control = mixsqp_control
-          )
-        )
-      }
-      
-      fit$x
-    },
-    
-    REBayes = {
-      if (!requireNamespace("REBayes", quietly = TRUE)) {
-        stop(
-          paste(
-            "The `REBayes` backend requires the optional package `REBayes`.",
-            "Install it first, or use `backend = \"mixsqp\"`."
-          ),
-          call. = FALSE
-        )
-      }
-      
-      if (!requireNamespace("Rmosek", quietly = TRUE)) {
-        stop(
-          paste(
-            "The `REBayes` backend requires a working MOSEK installation via `Rmosek`.",
-            "Install/configure MOSEK and `Rmosek`, or use `backend = \"mixsqp\"`."
-          ),
-          call. = FALSE
-        )
-      }
-      
-      rebayes_args <- c(
-        list(
-          x = df_bin$s,
-          k = df_bin$n,
-          v = tau,
-          collapse = FALSE
-        ),
-        if (is.null(weight_col)) {
-          list()
-        } else {
-          list(weights = df_bin$weight / sum(df_bin$weight))
-        },
-        rebayes_control
-      )
-      
-      fit <- tryCatch(
-        do.call(REBayes::Bmix, rebayes_args),
-        error = function(e) {
-          stop(
-            paste(
-              "The `REBayes` backend failed.",
-              "This usually means MOSEK / `Rmosek` is not installed or configured correctly.",
-              "Original error:", conditionMessage(e)
-            ),
-            call. = FALSE
-          )
-        }
-      )
-      
-      fit$y
-    }
+
+  .estimate_mixture_npmle_from_binomial(
+    df_bin = df_bin,
+    tau = tau,
+    backend = backend,
+    mixsqp_control = mixsqp_control,
+    rebayes_control = rebayes_control
   )
-  
-  .standardize_mixture_df(theta = tau, g = fit_g)
 }
 
 #' Estimate an Empirical Raw Mixture
@@ -230,35 +130,8 @@ estimate_mixture_raw <- function(df,
     x_thresh = x_thresh,
     weight_col = weight_col
   )
-  df_bin <- dplyr::mutate(df_bin, q = .data$s / .data$n)
 
-  if (is.null(weight_col)) {
-    res_raw <- dplyr::group_by(df_bin, q)
-    res_raw <- dplyr::summarise(res_raw, total = dplyr::n(), .groups = "drop")
-    res_raw <- dplyr::transmute(
-      res_raw,
-      theta = .data$q,
-      g = .data$total / sum(.data$total)
-    )
-  } else {
-    res_raw <- dplyr::group_by(df_bin, q)
-    res_raw <- dplyr::summarise(
-      res_raw,
-      total = sum(.data$weight),
-      .groups = "drop"
-    )
-    res_raw <- dplyr::transmute(
-      res_raw,
-      theta = .data$q,
-      g = .data$total / sum(.data$total)
-    )
-  }
-
-  if (!0 %in% res_raw$theta) {
-    res_raw <- dplyr::bind_rows(data.frame(theta = 0, g = 0), res_raw)
-  }
-
-  .standardize_mixture_df(theta = res_raw$theta, g = res_raw$g)
+  .estimate_mixture_raw_from_binomial(df_bin = df_bin)
 }
 
 #' Estimate a Beta Mixture Approximation
@@ -299,41 +172,7 @@ estimate_mixture_beta <- function(df,
     weight_col = weight_col
   )
 
-  all_success <- all(df_bin$s == df_bin$n)
-  all_failure <- all(df_bin$s == 0)
-
-  if (all_success || all_failure) {
-    g <- rep(0, length(tau))
-
-    if (all_success) {
-      idx <- which.min(abs(tau - 1))
-      beta_info <- list(alpha = NA_real_, beta = NA_real_)
-    } else {
-      idx <- which.min(abs(tau - 0))
-      beta_info <- list(alpha = NA_real_, beta = NA_real_)
-    }
-
-    g[idx] <- 1
-
-    out <- .standardize_mixture_df(theta = tau, g = g)
-    attr(out, "beta_mle") <- beta_info
-    return(out)
-  }
-
-  fit_info <- .fit_betabinomial_vgam(df_bin, weight_col = weight_col)
-
-  out <- .discretize_beta_on_tau(
-    alpha = fit_info$alpha,
-    beta = fit_info$beta,
-    tau = tau
-  )
-
-  attr(out, "beta_mle") <- list(
-    alpha = fit_info$alpha,
-    beta = fit_info$beta
-  )
-
-  out
+  .estimate_mixture_beta_from_binomial(df_bin = df_bin, tau = tau)
 }
 
 #' Estimate Mixtures Across a Threshold Grid
@@ -364,59 +203,384 @@ estimate_all_mixtures <- function(df,
     weight_col = weight_col
   )
 
-  df$id <- factor(df$id)
+  precomputed <- .precompute_binomial_grid(
+    df = df,
+    x_grid = x_grid,
+    weight_col = weight_col
+  )
+
+  .estimate_all_mixtures_from_precomputed(
+    precomputed = precomputed,
+    method = method,
+    ...
+  )
+}
+
+.estimate_mixture_efron_from_binomial <- function(df_bin,
+                                                  tau = seq(from = 0.005, to = 0.995, by = 0.005),
+                                                  pDegree = 7,
+                                                  c0 = 1,
+                                                  aStart = 1.0,
+                                                  deconv_cache = NULL,
+                                                  compute_stats = TRUE) {
+  x_input <- dplyr::select(df_bin, n, s)
+
+  if (is.null(deconv_cache)) {
+    result <- deconv_fast(
+      tau = tau,
+      X = x_input,
+      family = "Binomial",
+      pDegree = pDegree,
+      c0 = c0,
+      aStart = aStart,
+      compute_stats = compute_stats,
+      obs_weights = if ("weight" %in% names(df_bin)) df_bin$weight else NULL
+    )
+  } else {
+    logP <- .build_binomial_logP_matrix(
+      n = df_bin$n,
+      s = df_bin$s,
+      tau = deconv_cache$tau
+    )
+
+    result <- deconv_fast(
+      tau = deconv_cache$tau,
+      family = "Binomial",
+      y = 1,
+      Q = deconv_cache$Q,
+      P = logP,
+      c0 = c0,
+      aStart = aStart,
+      compute_stats = compute_stats,
+      obs_weights = if ("weight" %in% names(df_bin)) df_bin$weight else NULL
+    )
+  }
+
+  stats_df <- data.frame(result$stats)
+  out <- .standardize_mixture_df(theta = stats_df$theta, g = stats_df$g)
+  attr(out, "deconv_mle") <- result$mle
+
+  out
+}
+
+.estimate_mixture_npmle_from_binomial <- function(df_bin,
+                                                  tau = seq(from = 0, to = 1, by = 0.005),
+                                                  backend = c("mixsqp", "REBayes"),
+                                                  mixsqp_control = list(),
+                                                  rebayes_control = list()) {
+  backend <- match.arg(backend)
+
+  fit_g <- switch(
+    backend,
+
+    mixsqp = {
+      if (is.null(mixsqp_control$verbose)) {
+        mixsqp_control$verbose <- FALSE
+      }
+
+      logL <- vapply(
+        tau,
+        FUN = function(prob) {
+          stats::dbinom(
+            x = df_bin$s,
+            size = df_bin$n,
+            prob = prob,
+            log = TRUE
+          )
+        },
+        FUN.VALUE = numeric(nrow(df_bin))
+      )
+
+      fit <- if ("weight" %in% names(df_bin)) {
+        do.call(
+          mixsqp::mixsqp,
+          list(
+            L = logL,
+            w = df_bin$weight,
+            log = TRUE,
+            control = mixsqp_control
+          )
+        )
+      } else {
+        do.call(
+          mixsqp::mixsqp,
+          list(
+            L = logL,
+            log = TRUE,
+            control = mixsqp_control
+          )
+        )
+      }
+
+      fit$x
+    },
+
+    REBayes = {
+      if (!requireNamespace("REBayes", quietly = TRUE)) {
+        stop(
+          paste(
+            "The `REBayes` backend requires the optional package `REBayes`.",
+            "Install it first, or use `backend = \"mixsqp\"`."
+          ),
+          call. = FALSE
+        )
+      }
+
+      if (!requireNamespace("Rmosek", quietly = TRUE)) {
+        stop(
+          paste(
+            "The `REBayes` backend requires a working MOSEK installation via `Rmosek`.",
+            "Install/configure MOSEK and `Rmosek`, or use `backend = \"mixsqp\"`."
+          ),
+          call. = FALSE
+        )
+      }
+
+      rebayes_args <- c(
+        list(
+          x = df_bin$s,
+          k = df_bin$n,
+          v = tau,
+          collapse = FALSE
+        ),
+        if ("weight" %in% names(df_bin)) {
+          list(weights = df_bin$weight / sum(df_bin$weight))
+        } else {
+          list()
+        },
+        rebayes_control
+      )
+
+      fit <- tryCatch(
+        do.call(REBayes::Bmix, rebayes_args),
+        error = function(e) {
+          stop(
+            paste(
+              "The `REBayes` backend failed.",
+              "This usually means MOSEK / `Rmosek` is not installed or configured correctly.",
+              "Original error:", conditionMessage(e)
+            ),
+            call. = FALSE
+          )
+        }
+      )
+
+      fit$y
+    }
+  )
+
+  .standardize_mixture_df(theta = tau, g = fit_g)
+}
+
+.estimate_mixture_raw_from_binomial <- function(df_bin) {
+  df_bin <- dplyr::mutate(df_bin, q = .data$s / .data$n)
+
+  if ("weight" %in% names(df_bin)) {
+    res_raw <- dplyr::group_by(df_bin, q)
+    res_raw <- dplyr::summarise(
+      res_raw,
+      total = sum(.data$weight),
+      .groups = "drop"
+    )
+  } else {
+    res_raw <- dplyr::group_by(df_bin, q)
+    res_raw <- dplyr::summarise(res_raw, total = dplyr::n(), .groups = "drop")
+  }
+
+  res_raw <- dplyr::transmute(
+    res_raw,
+    theta = .data$q,
+    g = .data$total / sum(.data$total)
+  )
+
+  if (!0 %in% res_raw$theta) {
+    res_raw <- dplyr::bind_rows(data.frame(theta = 0, g = 0), res_raw)
+  }
+
+  .standardize_mixture_df(theta = res_raw$theta, g = res_raw$g)
+}
+
+.estimate_mixture_beta_from_binomial <- function(df_bin,
+                                                 tau = seq(0.005, 0.995, by = 0.005),
+                                                 start = NULL,
+                                                 fallback_starts = NULL,
+                                                 maxit = 200) {
+  all_success <- all(df_bin$s == df_bin$n)
+  all_failure <- all(df_bin$s == 0)
+
+  if (all_success || all_failure) {
+    g <- rep(0, length(tau))
+
+    if (all_success) {
+      idx <- which.min(abs(tau - 1))
+    } else {
+      idx <- which.min(abs(tau - 0))
+    }
+
+    g[idx] <- 1
+
+    out <- .standardize_mixture_df(theta = tau, g = g)
+    attr(out, "beta_mle") <- list(alpha = NA_real_, beta = NA_real_)
+    return(out)
+  }
+
+  fit_info <- .fit_betabinomial_optim(
+    df_bin,
+    weight_col = if ("weight" %in% names(df_bin)) "weight" else NULL,
+    start = start,
+    fallback_starts = fallback_starts,
+    maxit = maxit
+  )
+
+  out <- .discretize_beta_on_tau(
+    alpha = fit_info$alpha,
+    beta = fit_info$beta,
+    tau = tau
+  )
+
+  attr(out, "beta_mle") <- list(
+    alpha = fit_info$alpha,
+    beta = fit_info$beta
+  )
+
+  out
+}
+
+.estimate_all_mixtures_from_precomputed <- function(precomputed,
+                                                    method = c("spline", "npmle", "raw", "beta"),
+                                                    ...) {
+  method <- match.arg(method)
 
   res_list <- list()
   prev_k <- NULL
-  prev_x_thresh <- NULL
+  prev_name <- NULL
+  prev_beta_start <- NULL
+  prev_spline_start <- NULL
+  spline_cache <- NULL
 
-  for (x_thresh in x_grid) {
-    k <- as.integer(tapply(df$x <= x_thresh, df$id, sum))
+  if (identical(method, "spline")) {
+    args <- list(...)
+    tau <- if ("tau" %in% names(args)) args$tau else seq(from = 0.005, to = 0.995, by = 0.005)
+    pDegree <- if ("pDegree" %in% names(args)) args$pDegree else 7
+    spline_cache <- .make_spline_deconv_cache(
+      n = precomputed$n,
+      tau = tau,
+      pDegree = pDegree
+    )
+  }
+
+  for (idx in seq_along(precomputed$x_grid)) {
+    x_thresh <- precomputed$x_grid[idx]
+    k <- precomputed$s[, idx]
+    name <- as.character(x_thresh)
 
     if (!is.null(prev_k) && identical(k, prev_k)) {
-      res_list[[as.character(x_thresh)]] <- res_list[[as.character(prev_x_thresh)]]
-    } else {
-      mixture_est <- switch(
-        method,
-        spline = estimate_mixture_efron(
-          df = df,
-          id_col = "id",
-          val_col = "x",
-          x_thresh = x_thresh,
-          weight_col = weight_col,
-          ...
-        ),
-        npmle = estimate_mixture_npmle(
-          df = df,
-          id_col = "id",
-          val_col = "x",
-          x_thresh = x_thresh,
-          weight_col = weight_col,
-          ...
-        ),
-        raw = estimate_mixture_raw(
-          df = df,
-          id_col = "id",
-          val_col = "x",
-          x_thresh = x_thresh,
-          weight_col = weight_col,
-          ...
-        ),
-        beta = estimate_mixture_beta(
-          df = df,
-          id_col = "id",
-          val_col = "x",
-          x_thresh = x_thresh,
-          weight_col = weight_col,
-          ...
-        )
-      )
+      res_list[[name]] <- res_list[[prev_name]]
+      next
+    }
 
-      res_list[[as.character(x_thresh)]] <- mixture_est
-      prev_k <- k
-      prev_x_thresh <- x_thresh
+    df_bin <- .binomial_df_from_precomputed(precomputed, idx)
+
+    mixture_est <- if (identical(method, "beta")) {
+      .estimate_mixture_beta_from_binomial(
+        df_bin = df_bin,
+        start = prev_beta_start,
+        ...
+      )
+    } else if (identical(method, "spline")) {
+      .estimate_mixture_efron_from_binomial(
+        df_bin = df_bin,
+        aStart = if (is.null(prev_spline_start)) 1.0 else prev_spline_start,
+        deconv_cache = spline_cache,
+        ...
+      )
+    } else {
+      switch(
+        method,
+        npmle = .estimate_mixture_npmle_from_binomial(df_bin = df_bin, ...),
+        raw = .estimate_mixture_raw_from_binomial(df_bin = df_bin)
+      )
+    }
+
+    res_list[[name]] <- mixture_est
+    prev_k <- k
+    prev_name <- name
+
+    if (identical(method, "beta")) {
+      beta_mle <- attr(mixture_est, "beta_mle")
+      if (!is.null(beta_mle) &&
+          is.finite(beta_mle$alpha) &&
+          is.finite(beta_mle$beta) &&
+          beta_mle$alpha > 0 &&
+          beta_mle$beta > 0) {
+        prev_beta_start <- c(beta_mle$alpha, beta_mle$beta)
+      } else {
+        prev_beta_start <- NULL
+      }
+    } else if (identical(method, "spline")) {
+      spline_mle <- attr(mixture_est, "deconv_mle")
+      if (!is.null(spline_mle) &&
+          all(is.finite(spline_mle))) {
+        prev_spline_start <- spline_mle
+      } else {
+        prev_spline_start <- NULL
+      }
     }
   }
 
   res_list
+}
+
+.estimate_all_mixtures_for_bootstrap <- function(precomputed,
+                                                 method = c("spline", "npmle", "raw", "beta"),
+                                                 ...) {
+  method <- match.arg(method)
+
+  if (!identical(method, "spline")) {
+    return(.estimate_all_mixtures_from_precomputed(
+      precomputed = precomputed,
+      method = method,
+      ...
+    ))
+  }
+
+  .estimate_all_mixtures_from_precomputed(
+    precomputed = precomputed,
+    method = method,
+    compute_stats = FALSE,
+    ...
+  )
+}
+
+.build_binomial_logP_matrix <- function(n, s, tau) {
+  n <- as.numeric(n)
+  s <- as.numeric(s)
+  tau <- as.numeric(tau)
+
+  vapply(
+    tau,
+    FUN = function(prob) {
+      stats::dbinom(s, size = n, prob = prob, log = TRUE)
+    },
+    FUN.VALUE = numeric(length(n))
+  )
+}
+
+.make_spline_deconv_cache <- function(n,
+                                      tau = seq(from = 0.005, to = 0.995, by = 0.005),
+                                      pDegree = 7,
+                                      scale = TRUE) {
+  tau <- sort(unique(as.numeric(tau)))
+  Q <- splines::ns(tau, pDegree)
+
+  if (scale) {
+    Q <- scale(Q, center = TRUE, scale = FALSE)
+    Q <- sweep(Q, 2, sqrt(colSums(Q * Q)), "/")
+  }
+
+  list(
+    n = as.numeric(n),
+    tau = tau,
+    Q = as.matrix(Q)
+  )
 }

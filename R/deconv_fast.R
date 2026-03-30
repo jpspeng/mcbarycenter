@@ -34,7 +34,7 @@ deconv_fast <- function(tau, X, y, Q, P, n = 40,
                         family = c("Poisson", "Normal", "Binomial"),
                         ignoreZero = TRUE, deltaAt = NULL, c0 = 1,
                         scale = TRUE, pDegree = 5, aStart = 1.0,
-                        obs_weights = NULL, ...) {
+                        obs_weights = NULL, compute_stats = TRUE, ...) {
 
   family <- match.arg(family)
   if (!is.null(deltaAt) && (family != "Normal")) {
@@ -269,6 +269,28 @@ deconv_fast <- function(tau, X, y, Q, P, n = 40,
 
   opt <- stats::nlm(f = loglik, p = aStart, gradtol = 1e-10, ...)
   mle <- opt$estimate
+
+  if (!is.logical(compute_stats) || length(compute_stats) != 1L ||
+      is.na(compute_stats)) {
+    stop("`compute_stats` must be a single TRUE/FALSE value.", call. = FALSE)
+  }
+
+  if (!compute_stats) {
+    g <- softmax(as.vector(Q %*% mle))
+
+    return(list(
+      mle = mle,
+      Q = Q,
+      P = if (family == "Binomial") NULL else P,
+      logP = if (family == "Binomial") logP else NULL,
+      S = NA_real_,
+      cov = NULL,
+      cov.g = NULL,
+      stats = cbind(theta = tau, g = g),
+      loglik = loglik,
+      statsFunction = NULL
+    ))
+  }
 
   stats_function <- function(a) {
     g <- softmax(as.vector(Q %*% a))

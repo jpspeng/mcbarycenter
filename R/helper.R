@@ -125,6 +125,109 @@
   out
 }
 
+.precompute_binomial_grid <- function(df, x_grid, weight_col = NULL) {
+  .validate_input_df(df, required_cols = c("id", "x"), weight_col = weight_col)
+  .validate_id_weights(df, weight_col)
+
+  x_grid <- sort(unique(as.numeric(x_grid)))
+
+  if (length(x_grid) == 0 || anyNA(x_grid)) {
+    stop("`x_grid` must be a non-empty numeric vector with no NA.", call. = FALSE)
+  }
+
+  by_id_x <- split(df$x, df$id, drop = TRUE)
+  ids <- names(by_id_x)
+  n <- as.integer(lengths(by_id_x))
+
+  s_mat <- vapply(
+    by_id_x,
+    FUN = function(x) {
+      findInterval(x_grid, sort.int(x, method = "quick"))
+    },
+    FUN.VALUE = numeric(length(x_grid))
+  )
+  s_mat <- matrix(
+    s_mat,
+    nrow = length(x_grid),
+    ncol = length(by_id_x)
+  )
+  s_mat <- t(s_mat)
+
+  weights <- NULL
+  if (!is.null(weight_col)) {
+    weight_df <- dplyr::group_by(df, id)
+    weight_df <- dplyr::summarise(
+      weight_df,
+      weight = dplyr::first(.data[[weight_col]]),
+      .groups = "drop"
+    )
+    weights <- weight_df$weight[match(ids, weight_df$id)]
+  }
+
+  list(
+    x_grid = x_grid,
+    ids = ids,
+    n = n,
+    s = s_mat,
+    weight = weights
+  )
+}
+
+.binomial_df_from_precomputed <- function(precomputed, idx) {
+  if (!is.list(precomputed) ||
+      !all(c("ids", "n", "s", "x_grid") %in% names(precomputed))) {
+    stop(
+      "`precomputed` must be a binomial grid object from `.precompute_binomial_grid()`.",
+      call. = FALSE
+    )
+  }
+
+  if (!is.numeric(idx) || length(idx) != 1L || is.na(idx) ||
+      idx < 1 || idx > length(precomputed$x_grid)) {
+    stop("`idx` must index one column of the precomputed grid.", call. = FALSE)
+  }
+
+  out <- data.frame(
+    id = precomputed$ids,
+    n = precomputed$n,
+    s = precomputed$s[, idx],
+    row.names = NULL
+  )
+
+  if (!is.null(precomputed$weight)) {
+    out$weight <- precomputed$weight
+  }
+
+  out
+}
+
+.resample_precomputed_binomial_grid <- function(precomputed, sampled_idx) {
+  if (!is.list(precomputed) ||
+      !all(c("x_grid", "n", "s") %in% names(precomputed))) {
+    stop(
+      "`precomputed` must be a binomial grid object from `.precompute_binomial_grid()`.",
+      call. = FALSE
+    )
+  }
+
+  sampled_idx <- as.integer(sampled_idx)
+
+  if (length(sampled_idx) == 0 || anyNA(sampled_idx) ||
+      any(sampled_idx < 1 | sampled_idx > length(precomputed$n))) {
+    stop("`sampled_idx` contains invalid row indices.", call. = FALSE)
+  }
+
+  out <- list(
+    x_grid = precomputed$x_grid,
+    ids = as.character(seq_along(sampled_idx)),
+    n = precomputed$n[sampled_idx],
+    s = precomputed$s[sampled_idx, , drop = FALSE],
+    weight = if (is.null(precomputed$weight)) NULL else precomputed$weight[sampled_idx]
+  )
+
+  out
+}
+
 .standardize_mixture_df <- function(theta,
                                     g,
                                     sort_theta = TRUE,
@@ -216,11 +319,39 @@
 }
 
 
-.fit_betabinomial_vgam <- function(
+.beta_mom_start <- function(df_bin, weight_col = NULL) {
+  if (!all(c("n", "s") %in% names(df_bin))) {
+    stop("`df_bin` must contain columns `n` and `s`.", call. = FALSE)
+  }
+
+  w <- if (is.null(weight_col)) {
+    rep(1, nrow(df_bin))
+  } else {
+    as.numeric(df_bin[[weight_col]])
+  }
+
+  p_hat <- (df_bin$s + 0.5) / (df_bin$n + 1)
+  w_sum <- sum(w)
+  mu <- sum(w * p_hat) / w_sum
+  var_p <- sum(w * (p_hat - mu)^2) / w_sum
+  max_var <- max(mu * (1 - mu) - 1e-8, 1e-8)
+  var_p <- min(max(var_p, 1e-8), max_var)
+
+  phi <- mu * (1 - mu) / var_p - 1
+  phi <- max(phi, 1e-4)
+
+  c(
+    alpha = max(mu * phi, 1e-4),
+    beta = max((1 - mu) * phi, 1e-4)
+  )
+}
+
+.fit_betabinomial_optim <- function(
     df_bin,
     weight_col = NULL,
-    start_grid = NULL,
-    maxit = 100,
+    start = NULL,
+    fallback_starts = NULL,
+    maxit = 200,
     trace = FALSE
 ) {
   if (!all(c("n", "s") %in% names(df_bin))) {
@@ -254,138 +385,132 @@
   } else {
     weights <- NULL
   }
-  
-  # Default starting values to try.
-  # You can expand or replace this grid from the caller.
-  if (is.null(start_grid)) {
-    start_grid <- expand.grid(
-      ishape1 = c(0.25, 0.5, 1, 2, 5, 10),
-      ishape2 = c(0.25, 0.5, 1, 2, 5, 10),
-      KEEP.OUT.ATTRS = FALSE,
-      stringsAsFactors = FALSE
+
+  if (is.null(start)) {
+    start <- .beta_mom_start(
+      df_bin,
+      weight_col = if (is.null(weight_col)) NULL else weight_col
     )
   }
-  
-  if (!all(c("ishape1", "ishape2") %in% names(start_grid))) {
-    stop(
-      "`start_grid` must be a data.frame with columns `ishape1` and `ishape2`.",
-      call. = FALSE
+
+  start <- as.numeric(start)
+  if (length(start) != 2L || anyNA(start) || any(!is.finite(start)) ||
+      any(start <= 0)) {
+    stop("`start` must contain two finite positive values.", call. = FALSE)
+  }
+
+  if (is.null(fallback_starts)) {
+    mom <- .beta_mom_start(
+      df_bin,
+      weight_col = if (is.null(weight_col)) NULL else weight_col
+    )
+    fallback_starts <- rbind(
+      mom,
+      c(1, 1),
+      c(0.5, 0.5),
+      c(2, 2),
+      c(5, 5),
+      c(1, 5),
+      c(5, 1)
     )
   }
-  
-  start_grid$ishape1 <- as.numeric(start_grid$ishape1)
-  start_grid$ishape2 <- as.numeric(start_grid$ishape2)
-  
-  if (anyNA(start_grid$ishape1) || anyNA(start_grid$ishape2) ||
-      any(!is.finite(start_grid$ishape1)) || any(!is.finite(start_grid$ishape2)) ||
-      any(start_grid$ishape1 <= 0) || any(start_grid$ishape2 <= 0)) {
-    stop(
-      "All `ishape1` and `ishape2` values in `start_grid` must be finite and > 0.",
-      call. = FALSE
-    )
+
+  fallback_starts <- rbind(start, fallback_starts)
+  fallback_starts <- unique(round(fallback_starts, 12))
+
+  n_vec <- as.numeric(df_bin$n)
+  s_vec <- as.numeric(df_bin$s)
+  w_vec <- if (is.null(weights)) rep(1, length(n_vec)) else weights
+
+  negloglik <- function(eta) {
+    alpha <- exp(eta[1])
+    beta <- exp(eta[2])
+
+    ll_i <- lchoose(n_vec, s_vec) +
+      lbeta(s_vec + alpha, n_vec - s_vec + beta) -
+      lbeta(alpha, beta)
+
+    -sum(w_vec * ll_i)
   }
-  
+
   fit <- NULL
-  last_error <- NULL
-  attempts <- vector("list", nrow(start_grid))
-  
-  for (i in seq_len(nrow(start_grid))) {
-    ishape1_i <- start_grid$ishape1[i]
-    ishape2_i <- start_grid$ishape2[i]
-    
+  best_value <- Inf
+  attempts <- vector("list", nrow(fallback_starts))
+
+  for (i in seq_len(nrow(fallback_starts))) {
+    start_i <- as.numeric(fallback_starts[i, ])
+    eta0 <- log(start_i)
+
     if (isTRUE(trace)) {
       message(
         sprintf(
-          "Trying VGAM::vglm with ishape1 = %g, ishape2 = %g",
-          ishape1_i, ishape2_i
+          "Trying optim() beta-binomial fit with alpha = %g, beta = %g",
+          start_i[1], start_i[2]
         )
       )
     }
-    
+
     res <- tryCatch(
-      {
-        fit_i <- VGAM::vglm(
-          cbind(s, n - s) ~ 1,
-          family = VGAM::betabinomialff(
-            ishape1 = ishape1_i,
-            ishape2 = ishape2_i
-          ),
-          data = df_bin,
-          weights = weights,
-          control = VGAM::vglm.control(maxit = maxit)
-        )
-        
-        list(ok = TRUE, fit = fit_i, error = NULL)
-      },
-      error = function(e) {
-        list(ok = FALSE, fit = NULL, error = conditionMessage(e))
-      }
+      stats::optim(
+        par = eta0,
+        fn = negloglik,
+        method = "BFGS",
+        control = list(maxit = maxit, trace = if (isTRUE(trace)) 1 else 0)
+      ),
+      error = function(e) e
     )
-    
+
+    if (inherits(res, "error")) {
+      attempts[[i]] <- list(
+        alpha_start = start_i[1],
+        beta_start = start_i[2],
+        ok = FALSE,
+        error = conditionMessage(res)
+      )
+      next
+    }
+
+    eta_hat <- res$par
+    alpha_hat <- exp(eta_hat[1])
+    beta_hat <- exp(eta_hat[2])
+    ok <- is.finite(res$value) && is.finite(alpha_hat) && is.finite(beta_hat)
+
     attempts[[i]] <- list(
-      ishape1 = ishape1_i,
-      ishape2 = ishape2_i,
-      ok = res$ok,
-      error = res$error
+      alpha_start = start_i[1],
+      beta_start = start_i[2],
+      ok = ok,
+      convergence = res$convergence,
+      value = res$value,
+      message = res$message
     )
-    
-    if (isTRUE(res$ok)) {
-      fit <- res$fit
+
+    if (ok && res$value < best_value) {
+      best_value <- res$value
+      fit <- res
+    }
+
+    if (ok && identical(res$convergence, 0L)) {
+      fit <- res
       break
-    } else {
-      last_error <- res$error
     }
   }
-  
+
   if (is.null(fit)) {
-    tried_txt <- paste(
-      sprintf(
-        "(ishape1=%g, ishape2=%g)",
-        start_grid$ishape1, start_grid$ishape2
-      ),
-      collapse = ", "
-    )
-    
     stop(
       paste0(
-        "All VGAM::vglm fits failed for betabinomialff. Tried starting values: ",
-        tried_txt,
-        if (!is.null(last_error)) paste0(". Last error: ", last_error) else ""
+        "All optim() beta-binomial fits failed. Tried starting values: ",
+        paste(
+          sprintf("(alpha=%g, beta=%g)", fallback_starts[, 1], fallback_starts[, 2]),
+          collapse = ", "
+        )
       ),
       call. = FALSE
     )
   }
-  
-  cf <- stats::coef(fit)
-  
-  if (length(cf) != 2) {
-    stop(
-      paste0(
-        "Expected exactly 2 coefficients from intercept-only betabinomialff fit, got ",
-        length(cf),
-        ". Coefficient names were: ", paste(names(cf), collapse = ", ")
-      ),
-      call. = FALSE
-    )
-  }
-  
-  # betabinomialff(): eta1 = log(alpha), eta2 = log(beta)
-  eta_alpha <- unname(cf[1])
-  eta_beta  <- unname(cf[2])
-  
-  alpha <- exp(eta_alpha)
-  beta  <- exp(eta_beta)
-  
-  # Replace Inf with max double
-  if (!is.finite(alpha)) {
-    warning("alpha overflowed; capping to .Machine$double.xmax")
-    alpha <- .Machine$double.xmax
-  }
-  if (!is.finite(beta)) {
-    warning("beta overflowed; capping to .Machine$double.xmax")
-    beta <- .Machine$double.xmax
-  }
-  
+
+  alpha <- exp(fit$par[1])
+  beta <- exp(fit$par[2])
+
   list(
     fit = fit,
     alpha = alpha,

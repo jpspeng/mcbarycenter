@@ -298,16 +298,32 @@ mcbary <- function(df,
   } else {
     x_grid_overall <- x_grid
   }
-  
-  overall_mixture_res <- estimate_all_mixtures(
-    df = df,
-    id_col = "id",
-    val_col = "x",
-    method = method,
-    x_grid = x_grid_overall,
-    weight_col = weight_col,
-    ...
-  )
+
+  use_precomputed_grid <- is.null(cutpoints)
+
+  if (use_precomputed_grid) {
+    precomputed_grid <- .precompute_binomial_grid(
+      df = df,
+      x_grid = x_grid_overall,
+      weight_col = weight_col
+    )
+
+    overall_mixture_res <- .estimate_all_mixtures_from_precomputed(
+      precomputed = precomputed_grid,
+      method = method,
+      ...
+    )
+  } else {
+    overall_mixture_res <- estimate_all_mixtures(
+      df = df,
+      id_col = "id",
+      val_col = "x",
+      method = method,
+      x_grid = x_grid_overall,
+      weight_col = weight_col,
+      ...
+    )
+  }
   
   overall_quantile_res <- est_all_quantiles(
     mixture_res = overall_mixture_res,
@@ -316,8 +332,12 @@ mcbary <- function(df,
     estimate_first_last = estimate_endpoints
   )
   
-  ids <- unique(df$id)
-  by_id <- split(df, df$id)
+  if (use_precomputed_grid) {
+    n_ids <- length(precomputed_grid$n)
+  } else {
+    ids <- unique(df$id)
+    by_id <- split(df, df$id)
+  }
   
   res_matrix <- matrix(
     NA_real_,
@@ -340,33 +360,43 @@ mcbary <- function(df,
   }
   
   for (i in seq_len(bootstrap_samples)) {
-    sampled_ids <- sample(ids, size = length(ids), replace = TRUE)
-    picked <- by_id[as.character(sampled_ids)]
-    picked <- setNames(picked, seq_along(picked))
-    
-    df_boot <- dplyr::bind_rows(picked, .id = "boot_id")
-    df_boot <- dplyr::mutate(df_boot, id = .data$boot_id)
-    df_boot <- dplyr::select(df_boot, -boot_id)
-    
-    if (!is.null(cutpoints)) {
+    if (use_precomputed_grid) {
+      sampled_idx <- sample.int(n_ids, size = n_ids, replace = TRUE)
+      boot_precomputed <- .resample_precomputed_binomial_grid(
+        precomputed = precomputed_grid,
+        sampled_idx = sampled_idx
+      )
+
+      boot_mixture_res <- .estimate_all_mixtures_for_bootstrap(
+        precomputed = boot_precomputed,
+        method = method,
+        ...
+      )
+    } else {
+      sampled_ids <- sample(ids, size = length(ids), replace = TRUE)
+      picked <- by_id[as.character(sampled_ids)]
+      picked <- setNames(picked, seq_along(picked))
+
+      df_boot <- dplyr::bind_rows(picked, .id = "boot_id")
+      df_boot <- dplyr::mutate(df_boot, id = .data$boot_id)
+      df_boot <- dplyr::select(df_boot, -boot_id)
+
       x_grid_boot <- seq(
         min(df_boot$x),
         max(df_boot$x),
         length.out = cutpoints
       )
-    } else {
-      x_grid_boot <- x_grid
+
+      boot_mixture_res <- estimate_all_mixtures(
+        df = df_boot,
+        id_col = "id",
+        val_col = "x",
+        method = method,
+        x_grid = x_grid_boot,
+        weight_col = weight_col,
+        ...
+      )
     }
-    
-    boot_mixture_res <- estimate_all_mixtures(
-      df = df_boot,
-      id_col = "id",
-      val_col = "x",
-      method = method,
-      x_grid = x_grid_boot,
-      weight_col = weight_col,
-      ...
-    )
     
     boot_quantile_res <- est_all_quantiles(
       mixture_res = boot_mixture_res,
