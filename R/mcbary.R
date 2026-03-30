@@ -5,7 +5,7 @@
 #' @param use_midpoint Logical; whether to use interval midpoints between
 #'   adjacent thresholds.
 #' @param estimate_first_last Logical controlling endpoint treatment.
-#' @param use_isotonic Logical; whether to enforce monotonicity in the
+#' @param use_isotonic_dist Logical; whether to enforce monotonicity in the
 #'   cumulative mixture curves across threshold values.
 #'
 #' @return A data frame with columns `x`, `pmf`, and `cdf`.
@@ -14,7 +14,7 @@ est_dist_alpha <- function(mixture_res,
                            alpha,
                            use_midpoint = TRUE,
                            estimate_first_last = TRUE,
-                           use_isotonic = TRUE) {
+                           use_isotonic_dist = TRUE) {
   if (!is.list(mixture_res) || length(mixture_res) < 2) {
     stop("`mixture_res` must be a list of at least two mixture estimates.",
          call. = FALSE
@@ -46,7 +46,7 @@ est_dist_alpha <- function(mixture_res,
     alpha = alpha
   )
   
-  if (use_isotonic) {
+  if (use_isotonic_dist) {
     # enforce cumul_vals to be nonincreasing in x_vals
     iso_fit <- stats::isoreg(x = x_vals, y = -cumul_vals)
     cumul_vals <- -iso_fit$yf
@@ -128,7 +128,7 @@ est_dist_alpha <- function(mixture_res,
 #' @param use_midpoint Logical; whether to use interval midpoints between
 #'   adjacent thresholds.
 #' @param estimate_first_last Logical controlling endpoint treatment.
-#' @param use_isotonic Logical; whether to enforce monotonicity in the
+#' @param use_isotonic_dist Logical; whether to enforce monotonicity in the
 #'   cumulative mixture curves across threshold values.
 #'
 #' @return A numeric scalar giving the estimated mean alpha quantile.
@@ -137,13 +137,13 @@ est_mean_alpha_quantile <- function(mixture_res,
                                     alpha,
                                     use_midpoint = TRUE,
                                     estimate_first_last = TRUE,
-                                    use_isotonic = TRUE) {
+                                    use_isotonic_dist = TRUE) {
   dist_df <- est_dist_alpha(
     mixture_res = mixture_res,
     alpha = alpha,
     use_midpoint = use_midpoint,
     estimate_first_last = estimate_first_last,
-    use_isotonic = use_isotonic
+    use_isotonic_dist = use_isotonic_dist
   )
   
   sum(dist_df$x * dist_df$pmf)
@@ -157,13 +157,17 @@ est_mean_alpha_quantile <- function(mixture_res,
 #' @param use_midpoint Logical; whether to use interval midpoints between
 #'   adjacent thresholds.
 #' @param estimate_first_last Logical controlling endpoint treatment.
+#' @param use_isotonic_dist Logical; whether to enforce monotonicity in the
+#'   cumulative mixture curves across threshold values when constructing each
+#'   alpha-quantile distribution.
 #'
 #' @return A data frame with columns `quantile` and `estimate`.
 #' @export
 est_all_quantiles <- function(mixture_res,
                               alpha_grid = seq(0.01, 0.99, by = 0.01),
                               use_midpoint = TRUE,
-                              estimate_first_last = TRUE) {
+                              estimate_first_last = TRUE,
+                              use_isotonic_dist = TRUE) {
   if (!is.numeric(alpha_grid) || anyNA(alpha_grid)) {
     stop("`alpha_grid` must be a numeric vector with no missing values.",
       call. = FALSE
@@ -183,7 +187,8 @@ est_all_quantiles <- function(mixture_res,
         mixture_res = mixture_res,
         alpha = a,
         use_midpoint = use_midpoint,
-        estimate_first_last = estimate_first_last
+        estimate_first_last = estimate_first_last,
+        use_isotonic_dist = use_isotonic_dist
       )
     },
     FUN.VALUE = numeric(1)
@@ -210,7 +215,10 @@ est_all_quantiles <- function(mixture_res,
 #' @param use_midpoint Logical; whether to use interval midpoints between
 #'   adjacent thresholds.
 #' @param estimate_endpoints Logical controlling endpoint treatment.
-#' @param use_isotonic Logical; if `TRUE`, apply isotonic regression to
+#' @param use_isotonic_dist Logical; whether to enforce monotonicity in the
+#'   cumulative mixture curves across threshold values when constructing each
+#'   alpha-quantile distribution.
+#' @param use_isotonic_output Logical; if `TRUE`, apply isotonic regression to
 #'   `res$estimate`, `res$ci_lo`, and `res$ci_hi`.
 #' @param weight_col Optional column name containing id-level weights.
 #' @param progress Logical; whether to display a bootstrap progress bar.
@@ -237,7 +245,8 @@ mcbary <- function(df,
                 alpha_grid = seq(0.01, 0.99, by = 0.01),
                 use_midpoint = TRUE,
                 estimate_endpoints = TRUE,
-                use_isotonic = FALSE,
+                use_isotonic_dist = TRUE,
+                use_isotonic_output = FALSE,
                 weight_col = NULL,
                 progress = TRUE,
                 ci_level = 0.95,
@@ -270,9 +279,16 @@ mcbary <- function(df,
          call. = FALSE)
   }
   
-  if (!is.logical(use_isotonic) || length(use_isotonic) != 1L ||
-      is.na(use_isotonic)) {
-    stop("`use_isotonic` must be a single TRUE/FALSE value.", call. = FALSE)
+  if (!is.logical(use_isotonic_dist) || length(use_isotonic_dist) != 1L ||
+      is.na(use_isotonic_dist)) {
+    stop("`use_isotonic_dist` must be a single TRUE/FALSE value.",
+         call. = FALSE)
+  }
+
+  if (!is.logical(use_isotonic_output) || length(use_isotonic_output) != 1L ||
+      is.na(use_isotonic_output)) {
+    stop("`use_isotonic_output` must be a single TRUE/FALSE value.",
+         call. = FALSE)
   }
   
   if (!is.logical(estimate_endpoints) || length(estimate_endpoints) != 1L ||
@@ -347,7 +363,8 @@ mcbary <- function(df,
     mixture_res = overall_mixture_res,
     alpha_grid = alpha_grid,
     use_midpoint = use_midpoint,
-    estimate_first_last = estimate_endpoints
+    estimate_first_last = estimate_endpoints,
+    use_isotonic_dist = use_isotonic_dist
   )
   
   if (use_precomputed_grid && identical(bootstrap_type, "cluster")) {
@@ -449,7 +466,8 @@ mcbary <- function(df,
       mixture_res = boot_mixture_res,
       alpha_grid = alpha_grid,
       use_midpoint = use_midpoint,
-      estimate_first_last = estimate_endpoints
+      estimate_first_last = estimate_endpoints,
+      use_isotonic_dist = use_isotonic_dist
     )
     
     res_matrix[i, ] <- boot_quantile_res$estimate
@@ -505,7 +523,7 @@ mcbary <- function(df,
     pct_ci_hi = pct_ci_hi
   )
   
-  if (use_isotonic) {
+  if (use_isotonic_output) {
     res$estimate <- stats::isoreg(x = res$quantile, y = res$estimate)$yf
     res$ci_lo <- stats::isoreg(x = res$quantile, y = res$ci_lo)$yf
     res$ci_hi <- stats::isoreg(x = res$quantile, y = res$ci_hi)$yf

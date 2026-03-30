@@ -7,7 +7,7 @@ est_dist_alpha(
   alpha,
   use_midpoint = TRUE,
   estimate_first_last = TRUE,
-  use_isotonic = TRUE
+  use_isotonic_dist = TRUE
 )
 }
 \arguments{
@@ -20,7 +20,7 @@ adjacent thresholds.}
 
 \item{estimate_first_last}{Logical controlling endpoint treatment.}
 
-\item{use_isotonic}{Logical; whether to enforce monotonicity in the
+\item{use_isotonic_dist}{Logical; whether to enforce monotonicity in the
 cumulative mixture curves across threshold values.}
 }
 \value{

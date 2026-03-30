@@ -13,7 +13,8 @@ mcbary(
   alpha_grid = seq(0.01, 0.99, by = 0.01),
   use_midpoint = TRUE,
   estimate_endpoints = TRUE,
-  use_isotonic = FALSE,
+  use_isotonic_dist = TRUE,
+  use_isotonic_output = FALSE,
   weight_col = NULL,
   progress = TRUE,
   ci_level = 0.95,
@@ -44,7 +45,11 @@ adjacent thresholds.}
 
 \item{estimate_endpoints}{Logical controlling endpoint treatment.}
 
-\item{use_isotonic}{Logical; if \code{TRUE}, apply isotonic regression to
+\item{use_isotonic_dist}{Logical; whether to enforce monotonicity in the
+cumulative mixture curves across threshold values when constructing each
+alpha-quantile distribution.}
+
+\item{use_isotonic_output}{Logical; if \code{TRUE}, apply isotonic regression to
 \code{res$estimate}, \code{res$ci_lo}, and \code{res$ci_hi}.}
 
 \item{weight_col}{Optional column name containing id-level weights.}

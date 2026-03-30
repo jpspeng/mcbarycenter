@@ -96,13 +96,56 @@ test_that("mcbary can isotonicize estimate and confidence bounds", {
     x_grid = 1,
     bootstrap_samples = 2,
     alpha_grid = c(0.25, 0.5, 0.75),
-    use_isotonic = TRUE,
+    use_isotonic_output = TRUE,
     progress = FALSE
   )
   
   expect_true(all(diff(fit$res$estimate) >= 0))
   expect_true(all(diff(fit$res$ci_lo) >= 0))
   expect_true(all(diff(fit$res$ci_hi) >= 0))
+})
+
+test_that("mcbary passes distribution isotonic control through quantile estimation", {
+  captured <- list()
+
+  testthat::local_mocked_bindings(
+    estimate_all_mixtures = function(...) list("1" = data.frame(
+      theta = c(0, 1),
+      g = c(1, 0),
+      cumul = c(1, 1)
+    )),
+    est_all_quantiles = function(mixture_res, alpha_grid, ..., use_isotonic_dist = TRUE) {
+      captured <<- c(captured, list(use_isotonic_dist))
+      data.frame(
+        quantile = alpha_grid,
+        estimate = c(3, 1, 2)[seq_along(alpha_grid)]
+      )
+    }
+  )
+
+  input <- data.frame(
+    id = c(1, 1, 2, 2),
+    value = c(1, 2, 3, 4)
+  )
+
+  expect_warning(
+    fit <- mcbary(
+      df = input,
+      id_col = "id",
+      val_col = "value",
+      method = "raw",
+      x_grid = 1,
+      bootstrap_samples = 2,
+      alpha_grid = c(0.25, 0.5, 0.75),
+      use_isotonic_dist = FALSE,
+      use_isotonic_output = FALSE,
+      progress = FALSE
+    ),
+    "The estimated barycenter's quantile function is not monotone increasing."
+  )
+
+  expect_false(any(unlist(captured)))
+  expect_equal(fit$res$estimate, c(3, 1, 2))
 })
 
 test_that("mcbary requires cutpoints or x_grid", {
@@ -168,7 +211,7 @@ test_that("est_dist_alpha returns x, pmf, and cdf and matches mean helper", {
     alpha = 0.5,
     use_midpoint = TRUE,
     estimate_first_last = TRUE,
-    use_isotonic = FALSE
+    use_isotonic_dist = FALSE
   )
   
   expect_named(dist, c("x", "pmf", "cdf"))
@@ -180,7 +223,7 @@ test_that("est_dist_alpha returns x, pmf, and cdf and matches mean helper", {
       alpha = 0.5,
       use_midpoint = TRUE,
       estimate_first_last = TRUE,
-      use_isotonic = FALSE
+      use_isotonic_dist = FALSE
     ),
     sum(dist$x * dist$pmf)
   )

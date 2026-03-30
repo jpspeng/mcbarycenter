@@ -6,7 +6,8 @@ est_all_quantiles(
   mixture_res,
   alpha_grid = seq(0.01, 0.99, by = 0.01),
   use_midpoint = TRUE,
-  estimate_first_last = TRUE
+  estimate_first_last = TRUE,
+  use_isotonic_dist = TRUE
 )
 }
 \arguments{
@@ -18,6 +19,10 @@ est_all_quantiles(
 adjacent thresholds.}
 
 \item{estimate_first_last}{Logical controlling endpoint treatment.}
+
+\item{use_isotonic_dist}{Logical; whether to enforce monotonicity in the
+cumulative mixture curves across threshold values when constructing each
+alpha-quantile distribution.}
 }
 \value{
 A data frame with columns \code{quantile} and \code{estimate}.
