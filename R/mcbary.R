@@ -215,6 +215,10 @@ est_all_quantiles <- function(mixture_res,
 #' @param weight_col Optional column name containing id-level weights.
 #' @param progress Logical; whether to display a bootstrap progress bar.
 #' @param ci_level Confidence level.
+#' @param bootstrap_type Bootstrap scheme: `"cluster"` resamples ids with
+#'   replacement and keeps all rows within sampled ids; `"two_stage"` resamples
+#'   ids with replacement and then resamples rows within each sampled id with
+#'   replacement, preserving the sampled id's row count.
 #' @param ... Additional arguments passed to [estimate_all_mixtures()].
 #'
 #' @return A list with components `res`, `cov`, `mixtures`, `method`, and
@@ -237,8 +241,10 @@ mcbary <- function(df,
                 weight_col = NULL,
                 progress = TRUE,
                 ci_level = 0.95,
+                bootstrap_type = c("cluster", "two_stage"),
                 ...) {
   method <- match.arg(method)
+  bootstrap_type <- match.arg(bootstrap_type)
   data_out <- data.frame(
     id = df[[id_col]],
     val = df[[val_col]]
@@ -332,7 +338,7 @@ mcbary <- function(df,
     estimate_first_last = estimate_endpoints
   )
   
-  if (use_precomputed_grid) {
+  if (use_precomputed_grid && identical(bootstrap_type, "cluster")) {
     n_ids <- length(precomputed_grid$n)
   } else {
     ids <- unique(df$id)
@@ -360,7 +366,7 @@ mcbary <- function(df,
   }
   
   for (i in seq_len(bootstrap_samples)) {
-    if (use_precomputed_grid) {
+    if (use_precomputed_grid && identical(bootstrap_type, "cluster")) {
       sampled_idx <- sample.int(n_ids, size = n_ids, replace = TRUE)
       boot_precomputed <- .resample_precomputed_binomial_grid(
         precomputed = precomputed_grid,
@@ -375,17 +381,32 @@ mcbary <- function(df,
     } else {
       sampled_ids <- sample(ids, size = length(ids), replace = TRUE)
       picked <- by_id[as.character(sampled_ids)]
+
+      if (identical(bootstrap_type, "two_stage")) {
+        picked <- lapply(
+          picked,
+          function(df_id) {
+            df_id[sample.int(nrow(df_id), size = nrow(df_id), replace = TRUE), ,
+              drop = FALSE]
+          }
+        )
+      }
+
       picked <- setNames(picked, seq_along(picked))
 
       df_boot <- dplyr::bind_rows(picked, .id = "boot_id")
       df_boot <- dplyr::mutate(df_boot, id = .data$boot_id)
       df_boot <- dplyr::select(df_boot, -boot_id)
 
-      x_grid_boot <- seq(
-        min(df_boot$x),
-        max(df_boot$x),
-        length.out = cutpoints
-      )
+      if (!is.null(cutpoints)) {
+        x_grid_boot <- seq(
+          min(df_boot$x),
+          max(df_boot$x),
+          length.out = cutpoints
+        )
+      } else {
+        x_grid_boot <- x_grid
+      }
 
       boot_mixture_res <- estimate_all_mixtures(
         df = df_boot,

@@ -127,6 +127,35 @@ test_that("mcbary requires cutpoints or x_grid", {
   )
 })
 
+test_that("mcbary supports two-stage bootstrap resampling", {
+  input <- data.frame(
+    id = c(1, 1, 1, 2, 2, 2, 3, 3, 3),
+    value = c(1, 2, 3, 2, 3, 4, 1, 4, 5)
+  )
+
+  fit <- mcbary(
+    df = input,
+    id_col = "id",
+    val_col = "value",
+    method = "raw",
+    x_grid = 1:5,
+    bootstrap_samples = 4,
+    alpha_grid = c(0.25, 0.5, 0.75),
+    bootstrap_type = "two_stage",
+    progress = FALSE
+  )
+
+  expect_true(is.list(fit))
+  expect_named(
+    fit$res,
+    c(
+      "quantile", "estimate", "estimate_bs", "se", "ci_lo",
+      "ci_hi", "pct_ci_lo", "pct_ci_hi"
+    )
+  )
+  expect_equal(nrow(fit$res), 3)
+})
+
 test_that("est_dist_alpha returns x, pmf, and cdf and matches mean helper", {
   mixture_res <- list(
     "1" = data.frame(theta = c(0, 0.5, 1), g = c(0.2, 0.3, 0.5), cumul = c(0.2, 0.5, 1)),
