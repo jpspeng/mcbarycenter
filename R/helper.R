@@ -351,6 +351,8 @@
     weight_col = NULL,
     start = NULL,
     fallback_starts = NULL,
+    lower = c(1e-4, 1e-4),
+    upper = c(1e5, 1e5),
     maxit = 200,
     trace = FALSE
 ) {
@@ -422,6 +424,19 @@
   s_vec <- as.numeric(df_bin$s)
   w_vec <- if (is.null(weights)) rep(1, length(n_vec)) else weights
 
+  lower <- as.numeric(lower)
+  upper <- as.numeric(upper)
+
+  if (length(lower) != 2L || length(upper) != 2L ||
+      anyNA(lower) || anyNA(upper) ||
+      any(!is.finite(lower)) || any(!is.finite(upper)) ||
+      any(lower <= 0) || any(upper <= lower)) {
+    stop(
+      "`lower` and `upper` must be length-2 numeric vectors with 0 < lower < upper.",
+      call. = FALSE
+    )
+  }
+
   negloglik <- function(eta) {
     alpha <- exp(eta[1])
     beta <- exp(eta[2])
@@ -454,7 +469,9 @@
       stats::optim(
         par = eta0,
         fn = negloglik,
-        method = "BFGS",
+        method = "L-BFGS-B",
+        lower = log(lower),
+        upper = log(upper),
         control = list(maxit = maxit, trace = if (isTRUE(trace)) 1 else 0)
       ),
       error = function(e) e
