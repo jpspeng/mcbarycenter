@@ -648,7 +648,7 @@
     mix <- mix[order(mix$theta), , drop = FALSE]
   }
 
-  idx <- which(mix$theta <= alpha)
+  idx <- which(mix$theta < alpha)
   if (length(idx) == 0) {
     return(0)
   }

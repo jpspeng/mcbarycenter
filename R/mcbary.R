@@ -116,6 +116,7 @@ est_dist_alpha <- function(mixture_res,
     x = .data$x_temp,
     pmf = .data$delta / delta_sum
   )
+  dist_df <- dplyr::arrange(dist_df, .data$x)
   dist_df$cdf <- cumsum(dist_df$pmf)
   
   dist_df

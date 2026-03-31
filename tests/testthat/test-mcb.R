@@ -228,3 +228,24 @@ test_that("est_dist_alpha returns x, pmf, and cdf and matches mean helper", {
     sum(dist$x * dist$pmf)
   )
 })
+
+test_that("est_dist_alpha orders support by x before forming cdf", {
+  mixture_res <- list(
+    "1" = data.frame(theta = c(0, 0.5, 1), g = c(0.2, 0.3, 0.5), cumul = c(0.2, 0.5, 1)),
+    "2" = data.frame(theta = c(0, 0.5, 1), g = c(0.1, 0.4, 0.5), cumul = c(0.1, 0.5, 1)),
+    "3" = data.frame(theta = c(0, 0.5, 1), g = c(0.05, 0.25, 0.7), cumul = c(0.05, 0.3, 1))
+  )
+
+  dist <- est_dist_alpha(
+    mixture_res = mixture_res,
+    alpha = 0.5,
+    use_midpoint = TRUE,
+    estimate_first_last = FALSE,
+    use_isotonic_dist = FALSE
+  )
+
+  expect_equal(dist$x, sort(dist$x))
+  expect_equal(dist$cdf, cumsum(dist$pmf))
+  expect_equal(dist$cdf[dist$x == min(dist$x)], dist$pmf[dist$x == min(dist$x)])
+  expect_equal(tail(dist$cdf, 1), 1)
+})
