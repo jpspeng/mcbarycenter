@@ -267,6 +267,7 @@ estimate_all_mixtures <- function(df,
 .estimate_mixture_npmle_from_binomial <- function(df_bin,
                                                   tau = seq(from = 0, to = 1, by = 0.005),
                                                   backend = c("mixsqp", "REBayes"),
+                                                  start = NULL,
                                                   mixsqp_control = list(),
                                                   rebayes_control = list()) {
   backend <- match.arg(backend)
@@ -279,39 +280,25 @@ estimate_all_mixtures <- function(df,
         mixsqp_control$verbose <- FALSE
       }
 
-      logL <- vapply(
-        tau,
-        FUN = function(prob) {
-          stats::dbinom(
-            x = df_bin$s,
-            size = df_bin$n,
-            prob = prob,
-            log = TRUE
-          )
-        },
-        FUN.VALUE = numeric(nrow(df_bin))
+      collapsed <- .collapse_binomial_rows_for_mixsqp(df_bin)
+      logL <- .build_binomial_logP_matrix(
+        n = collapsed$n,
+        s = collapsed$s,
+        tau = tau
       )
 
-      fit <- if ("weight" %in% names(df_bin)) {
-        do.call(
-          mixsqp::mixsqp,
-          list(
-            L = logL,
-            w = df_bin$weight,
-            log = TRUE,
-            control = mixsqp_control
-          )
-        )
-      } else {
-        do.call(
-          mixsqp::mixsqp,
-          list(
-            L = logL,
-            log = TRUE,
-            control = mixsqp_control
-          )
-        )
+      fit_args <- list(
+        L = logL,
+        w = collapsed$weight,
+        log = TRUE,
+        control = mixsqp_control
+      )
+
+      if (!is.null(start)) {
+        fit_args$x0 <- start
       }
+
+      fit <- do.call(mixsqp::mixsqp, fit_args)
 
       fit$x
     },
@@ -342,7 +329,7 @@ estimate_all_mixtures <- function(df,
           x = df_bin$s,
           k = df_bin$n,
           v = tau,
-          collapse = FALSE
+          collapse = TRUE
         ),
         if ("weight" %in% names(df_bin)) {
           list(weights = df_bin$weight / sum(df_bin$weight))
@@ -462,6 +449,7 @@ estimate_all_mixtures <- function(df,
   prev_k <- NULL
   prev_name <- NULL
   prev_beta_start <- NULL
+  prev_npmle_start <- NULL
   prev_spline_start <- NULL
   spline_cache <- NULL
 
@@ -504,7 +492,11 @@ estimate_all_mixtures <- function(df,
     } else {
       switch(
         method,
-        npmle = .estimate_mixture_npmle_from_binomial(df_bin = df_bin, ...),
+        npmle = .estimate_mixture_npmle_from_binomial(
+          df_bin = df_bin,
+          start = prev_npmle_start,
+          ...
+        ),
         raw = .estimate_mixture_raw_from_binomial(df_bin = df_bin)
       )
     }
@@ -531,6 +523,12 @@ estimate_all_mixtures <- function(df,
         prev_spline_start <- spline_mle
       } else {
         prev_spline_start <- NULL
+      }
+    } else if (identical(method, "npmle")) {
+      if (all(is.finite(mixture_est$g)) && length(mixture_est$g) > 0) {
+        prev_npmle_start <- mixture_est$g
+      } else {
+        prev_npmle_start <- NULL
       }
     }
   }
@@ -571,6 +569,26 @@ estimate_all_mixtures <- function(df,
     },
     FUN.VALUE = numeric(length(n))
   )
+}
+
+.collapse_binomial_rows_for_mixsqp <- function(df_bin) {
+  has_weight <- "weight" %in% names(df_bin)
+  key <- paste(df_bin$n, df_bin$s, sep = "\r")
+  key_levels <- unique(key)
+  group_idx <- match(key, key_levels)
+  row_idx <- match(key_levels, key)
+
+  out <- data.frame(
+    n = df_bin$n[row_idx],
+    s = df_bin$s[row_idx],
+    weight = if (has_weight) {
+      as.numeric(rowsum(df_bin$weight, group = group_idx, reorder = FALSE)[, 1])
+    } else {
+      as.numeric(tabulate(group_idx, nbins = length(key_levels)))
+    }
+  )
+
+  out
 }
 
 .make_spline_deconv_cache <- function(n,
