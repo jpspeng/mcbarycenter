@@ -170,7 +170,7 @@ test_that("mcbary requires cutpoints or x_grid", {
   )
 })
 
-test_that("mcbary supports two-stage bootstrap resampling", {
+test_that("mcbary uses cluster bootstrap resampling by default", {
   input <- data.frame(
     id = c(1, 1, 1, 2, 2, 2, 3, 3, 3),
     value = c(1, 2, 3, 2, 3, 4, 1, 4, 5)
@@ -184,7 +184,6 @@ test_that("mcbary supports two-stage bootstrap resampling", {
     x_grid = 1:5,
     bootstrap_samples = 4,
     alpha_grid = c(0.25, 0.5, 0.75),
-    bootstrap_type = "two_stage",
     progress = FALSE
   )
 

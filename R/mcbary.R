@@ -224,10 +224,6 @@ est_all_quantiles <- function(mixture_res,
 #' @param weight_col Optional column name containing id-level weights.
 #' @param progress Logical; whether to display a bootstrap progress bar.
 #' @param ci_level Confidence level.
-#' @param bootstrap_type Bootstrap scheme: `"cluster"` resamples ids with
-#'   replacement and keeps all rows within sampled ids; `"two_stage"` resamples
-#'   ids with replacement and then resamples rows within each sampled id with
-#'   replacement, preserving the sampled id's row count.
 #' @param ... Additional arguments passed to [estimate_all_mixtures()].
 #'
 #' @return A list with components `res`, `cov`, `mixtures`, `method`, and
@@ -251,10 +247,8 @@ mcbary <- function(df,
                 weight_col = NULL,
                 progress = TRUE,
                 ci_level = 0.95,
-                bootstrap_type = c("cluster", "two_stage"),
                 ...) {
   method <- match.arg(method)
-  bootstrap_type <- match.arg(bootstrap_type)
   data_out <- data.frame(
     id = df[[id_col]],
     val = df[[val_col]]
@@ -324,7 +318,7 @@ mcbary <- function(df,
 
   use_precomputed_grid <- is.null(cutpoints)
 
-  if (use_precomputed_grid && identical(bootstrap_type, "cluster")) {
+  if (use_precomputed_grid) {
     precomputed_grid <- .precompute_binomial_grid(
       df = df,
       x_grid = x_grid_overall,
@@ -333,18 +327,6 @@ mcbary <- function(df,
 
     overall_mixture_res <- .estimate_all_mixtures_from_precomputed(
       precomputed = precomputed_grid,
-      method = method,
-      ...
-    )
-  } else if (use_precomputed_grid && identical(bootstrap_type, "two_stage")) {
-    precomputed_two_stage <- .precompute_threshold_bin_counts(
-      df = df,
-      x_grid = x_grid_overall,
-      weight_col = weight_col
-    )
-
-    overall_mixture_res <- .estimate_all_mixtures_from_precomputed(
-      precomputed = precomputed_two_stage,
       method = method,
       ...
     )
@@ -368,10 +350,8 @@ mcbary <- function(df,
     use_isotonic_dist = use_isotonic_dist
   )
   
-  if (use_precomputed_grid && identical(bootstrap_type, "cluster")) {
+  if (use_precomputed_grid) {
     n_ids <- length(precomputed_grid$n)
-  } else if (use_precomputed_grid && identical(bootstrap_type, "two_stage")) {
-    n_ids <- length(precomputed_two_stage$n)
   } else {
     ids <- unique(df$id)
     by_id <- split(df, df$id)
@@ -398,7 +378,7 @@ mcbary <- function(df,
   }
   
   for (i in seq_len(bootstrap_samples)) {
-    if (use_precomputed_grid && identical(bootstrap_type, "cluster")) {
+    if (use_precomputed_grid) {
       sampled_idx <- sample.int(n_ids, size = n_ids, replace = TRUE)
       boot_precomputed <- .resample_precomputed_binomial_grid(
         precomputed = precomputed_grid,
@@ -410,31 +390,9 @@ mcbary <- function(df,
         method = method,
         ...
       )
-    } else if (use_precomputed_grid && identical(bootstrap_type, "two_stage")) {
-      sampled_idx <- sample.int(n_ids, size = n_ids, replace = TRUE)
-      boot_precomputed <- .resample_two_stage_precomputed_grid(
-        precomputed = precomputed_two_stage,
-        sampled_idx = sampled_idx
-      )
-
-      boot_mixture_res <- .estimate_all_mixtures_for_bootstrap(
-        precomputed = boot_precomputed,
-        method = method,
-        ...
-      )
     } else {
       sampled_ids <- sample(ids, size = length(ids), replace = TRUE)
       picked <- by_id[as.character(sampled_ids)]
-
-      if (identical(bootstrap_type, "two_stage")) {
-        picked <- lapply(
-          picked,
-          function(df_id) {
-            df_id[sample.int(nrow(df_id), size = nrow(df_id), replace = TRUE), ,
-              drop = FALSE]
-          }
-        )
-      }
 
       picked <- setNames(picked, seq_along(picked))
 

@@ -281,46 +281,6 @@
   )
 }
 
-.resample_two_stage_precomputed_grid <- function(precomputed, sampled_idx) {
-  if (!is.list(precomputed) ||
-      !all(c("x_grid", "n", "bin_counts") %in% names(precomputed))) {
-    stop(
-      paste(
-        "`precomputed` must be a threshold bin object from",
-        "`.precompute_threshold_bin_counts()`."
-      ),
-      call. = FALSE
-    )
-  }
-
-  sampled_idx <- as.integer(sampled_idx)
-
-  if (length(sampled_idx) == 0 || anyNA(sampled_idx) ||
-      any(sampled_idx < 1 | sampled_idx > length(precomputed$n))) {
-    stop("`sampled_idx` contains invalid row indices.", call. = FALSE)
-  }
-
-  n_boot <- length(sampled_idx)
-  n_thresh <- length(precomputed$x_grid)
-  s_boot <- matrix(0L, nrow = n_boot, ncol = n_thresh)
-
-  for (i in seq_len(n_boot)) {
-    idx <- sampled_idx[i]
-    n_i <- precomputed$n[idx]
-    probs_i <- precomputed$bin_counts[idx, ] / n_i
-    boot_bins <- as.vector(stats::rmultinom(1, size = n_i, prob = probs_i))
-    s_boot[i, ] <- cumsum(boot_bins[seq_len(n_thresh)])
-  }
-
-  list(
-    x_grid = precomputed$x_grid,
-    ids = as.character(seq_len(n_boot)),
-    n = precomputed$n[sampled_idx],
-    s = s_boot,
-    weight = if (is.null(precomputed$weight)) NULL else precomputed$weight[sampled_idx]
-  )
-}
-
 .standardize_mixture_df <- function(theta,
                                     g,
                                     sort_theta = TRUE,
