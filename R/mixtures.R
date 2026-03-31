@@ -258,6 +258,7 @@ estimate_all_mixtures <- function(df,
 
   stats_df <- data.frame(result$stats)
   out <- .standardize_mixture_df(theta = stats_df$theta, g = stats_df$g)
+  attr(out, "mixture_type") <- "discrete"
   attr(out, "deconv_mle") <- result$mle
 
   out
@@ -369,7 +370,9 @@ estimate_all_mixtures <- function(df,
     }
   )
 
-  .standardize_mixture_df(theta = tau, g = fit_g)
+  out <- .standardize_mixture_df(theta = tau, g = fit_g)
+  attr(out, "mixture_type") <- "discrete"
+  out
 }
 
 .estimate_mixture_raw_from_binomial <- function(df_bin) {
@@ -397,7 +400,9 @@ estimate_all_mixtures <- function(df,
     res_raw <- dplyr::bind_rows(data.frame(theta = 0, g = 0), res_raw)
   }
 
-  .standardize_mixture_df(theta = res_raw$theta, g = res_raw$g)
+  out <- .standardize_mixture_df(theta = res_raw$theta, g = res_raw$g)
+  attr(out, "mixture_type") <- "discrete"
+  out
 }
 
 .estimate_mixture_beta_from_binomial <- function(df_bin,
@@ -420,6 +425,7 @@ estimate_all_mixtures <- function(df,
     g[idx] <- 1
 
     out <- .standardize_mixture_df(theta = tau, g = g)
+    attr(out, "mixture_type") <- "beta"
     attr(out, "beta_mle") <- list(alpha = NA_real_, beta = NA_real_)
     return(out)
   }
@@ -438,6 +444,7 @@ estimate_all_mixtures <- function(df,
     tau = tau
   )
 
+  attr(out, "mixture_type") <- "beta"
   attr(out, "beta_mle") <- list(
     alpha = fit_info$alpha,
     beta = fit_info$beta

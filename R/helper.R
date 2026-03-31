@@ -634,6 +634,18 @@
     stop("Each mixture estimate must be a data.frame.", call. = FALSE)
   }
 
+  mix_type <- attr(mixture_df, "mixture_type", exact = TRUE)
+  if (identical(mix_type, "beta")) {
+    beta_mle <- attr(mixture_df, "beta_mle", exact = TRUE)
+    if (!is.null(beta_mle) &&
+        is.finite(beta_mle$alpha) &&
+        is.finite(beta_mle$beta) &&
+        beta_mle$alpha > 0 &&
+        beta_mle$beta > 0) {
+      return(stats::pbeta(alpha, shape1 = beta_mle$alpha, shape2 = beta_mle$beta))
+    }
+  }
+
   if (!all(c("theta", "g") %in% names(mixture_df))) {
     stop(
       "Each mixture estimate must contain columns `theta` and `g`.",
