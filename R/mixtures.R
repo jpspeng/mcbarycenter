@@ -286,6 +286,25 @@ estimate_all_mixtures <- function(df,
         s = collapsed$s,
         tau = tau
       )
+      valid_cols <- colSums(is.finite(logL)) > 0
+
+      if (!any(valid_cols)) {
+        stop(
+          paste(
+            "No support points in `tau` yield positive likelihood for the observed binomial data.",
+            "Try using a different `tau` grid."
+          ),
+          call. = FALSE
+        )
+      }
+
+      if (sum(valid_cols) == 1L) {
+        fit_g <- numeric(length(tau))
+        fit_g[valid_cols] <- 1
+        return(fit_g)
+      }
+
+      logL <- logL[, valid_cols, drop = FALSE]
 
       fit_args <- list(
         L = logL,
@@ -295,12 +314,13 @@ estimate_all_mixtures <- function(df,
       )
 
       if (!is.null(start)) {
-        fit_args$x0 <- start
+        fit_args$x0 <- .subset_mixsqp_start(start, valid_cols)
       }
 
       fit <- do.call(mixsqp::mixsqp, fit_args)
-
-      fit$x
+      fit_g <- numeric(length(tau))
+      fit_g[valid_cols] <- fit$x
+      fit_g
     },
 
     REBayes = {
@@ -452,11 +472,17 @@ estimate_all_mixtures <- function(df,
   prev_npmle_start <- NULL
   prev_spline_start <- NULL
   spline_cache <- NULL
+  spline_disable_warm_start <- FALSE
 
   if (identical(method, "spline")) {
     args <- list(...)
     tau <- if ("tau" %in% names(args)) args$tau else seq(from = 0.005, to = 0.995, by = 0.005)
     pDegree <- if ("pDegree" %in% names(args)) args$pDegree else 7
+    spline_c0 <- if ("c0" %in% names(args)) args$c0 else 1
+    spline_disable_warm_start <- is.numeric(spline_c0) &&
+      length(spline_c0) == 1L &&
+      !is.na(spline_c0) &&
+      spline_c0 == 0
     spline_cache <- .make_spline_deconv_cache(
       n = precomputed$n,
       tau = tau,
@@ -485,7 +511,11 @@ estimate_all_mixtures <- function(df,
     } else if (identical(method, "spline")) {
       .estimate_mixture_efron_from_binomial(
         df_bin = df_bin,
-        aStart = if (is.null(prev_spline_start)) 1.0 else prev_spline_start,
+        aStart = if (spline_disable_warm_start || is.null(prev_spline_start)) {
+          1.0
+        } else {
+          prev_spline_start
+        },
         deconv_cache = spline_cache,
         ...
       )
@@ -518,7 +548,8 @@ estimate_all_mixtures <- function(df,
       }
     } else if (identical(method, "spline")) {
       spline_mle <- attr(mixture_est, "deconv_mle")
-      if (!is.null(spline_mle) &&
+      if (!spline_disable_warm_start &&
+          !is.null(spline_mle) &&
           all(is.finite(spline_mle))) {
         prev_spline_start <- spline_mle
       } else {
@@ -562,13 +593,15 @@ estimate_all_mixtures <- function(df,
   s <- as.numeric(s)
   tau <- as.numeric(tau)
 
-  vapply(
+  logP <- vapply(
     tau,
     FUN = function(prob) {
       stats::dbinom(s, size = n, prob = prob, log = TRUE)
     },
     FUN.VALUE = numeric(length(n))
   )
+
+  matrix(logP, nrow = length(n), ncol = length(tau))
 }
 
 .collapse_binomial_rows_for_mixsqp <- function(df_bin) {
@@ -589,6 +622,22 @@ estimate_all_mixtures <- function(df,
   )
 
   out
+}
+
+.subset_mixsqp_start <- function(start, valid_cols) {
+  start <- as.numeric(start)
+
+  if (length(start) != length(valid_cols) || anyNA(start) || any(start < 0)) {
+    return(NULL)
+  }
+
+  start <- start[valid_cols]
+
+  if (length(start) <= 1L || sum(start) <= 0 || !all(is.finite(start))) {
+    return(NULL)
+  }
+
+  start
 }
 
 .make_spline_deconv_cache <- function(n,
