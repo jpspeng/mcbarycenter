@@ -36,7 +36,9 @@ supplied if \code{cutpoints} is \code{NULL}.}
 \item{cutpoints}{Optional number of evenly spaced thresholds. Either
 \code{cutpoints} or \code{x_grid} must be supplied.}
 
-\item{bootstrap_samples}{Number of bootstrap resamples.}
+\item{bootstrap_samples}{Number of bootstrap resamples. When set to
+\code{1}, only the quantile estimate is reported and uncertainty columns
+are returned as \code{NA}.}
 
 \item{alpha_grid}{Grid of target quantile levels.}
 

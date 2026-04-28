@@ -211,7 +211,9 @@ est_all_quantiles <- function(mixture_res,
 #'   supplied if `cutpoints` is `NULL`.
 #' @param cutpoints Optional number of evenly spaced thresholds. Either
 #'   `cutpoints` or `x_grid` must be supplied.
-#' @param bootstrap_samples Number of bootstrap resamples.
+#' @param bootstrap_samples Number of bootstrap resamples. When set to 1, only
+#'   the quantile estimate is reported and uncertainty columns are returned as
+#'   `NA`.
 #' @param alpha_grid Grid of target quantile levels.
 #' @param use_midpoint Logical; whether to use interval midpoints between
 #'   adjacent thresholds.
@@ -262,8 +264,8 @@ mcbary <- function(df,
   )
   
   if (!is.numeric(bootstrap_samples) || length(bootstrap_samples) != 1 ||
-      is.na(bootstrap_samples) || bootstrap_samples < 2) {
-    stop("`bootstrap_samples` must be a single integer >= 2.", call. = FALSE)
+      is.na(bootstrap_samples) || bootstrap_samples < 1) {
+    stop("`bootstrap_samples` must be a single integer >= 1.", call. = FALSE)
   }
   
   bootstrap_samples <- as.integer(bootstrap_samples)
@@ -437,39 +439,49 @@ mcbary <- function(df,
     }
   }
   
-  # Bootstrap summaries
-  estimate_bs <- colMeans(res_matrix, na.rm = TRUE)
-  se <- apply(res_matrix, 2, stats::sd, na.rm = TRUE)
-  cov_mat <- stats::cov(res_matrix, use = "pairwise.complete.obs")
-  
-  # CI setup
-  alpha_ci <- 1 - ci_level
-  lo_prob <- alpha_ci / 2
-  hi_prob <- 1 - alpha_ci / 2
-  
-  # Percentile CIs
-  pct_ci_lo <- apply(
-    res_matrix,
-    2,
-    stats::quantile,
-    probs = lo_prob,
-    na.rm = TRUE,
-    names = FALSE
-  )
-  
-  pct_ci_hi <- apply(
-    res_matrix,
-    2,
-    stats::quantile,
-    probs = hi_prob,
-    na.rm = TRUE,
-    names = FALSE
-  )
-  
-  # Wald CIs
-  z <- stats::qnorm(1 - alpha_ci / 2)
-  ci_lo <- overall_quantile_res$estimate - z * se
-  ci_hi <- overall_quantile_res$estimate + z * se
+  if (bootstrap_samples == 1L) {
+    estimate_bs <- rep(NA_real_, length(alpha_grid))
+    se <- rep(NA_real_, length(alpha_grid))
+    cov_mat <- matrix(NA_real_, nrow = length(alpha_grid), ncol = length(alpha_grid))
+    pct_ci_lo <- rep(NA_real_, length(alpha_grid))
+    pct_ci_hi <- rep(NA_real_, length(alpha_grid))
+    ci_lo <- rep(NA_real_, length(alpha_grid))
+    ci_hi <- rep(NA_real_, length(alpha_grid))
+  } else {
+    # Bootstrap summaries
+    estimate_bs <- colMeans(res_matrix, na.rm = TRUE)
+    se <- apply(res_matrix, 2, stats::sd, na.rm = TRUE)
+    cov_mat <- stats::cov(res_matrix, use = "pairwise.complete.obs")
+    
+    # CI setup
+    alpha_ci <- 1 - ci_level
+    lo_prob <- alpha_ci / 2
+    hi_prob <- 1 - alpha_ci / 2
+    
+    # Percentile CIs
+    pct_ci_lo <- apply(
+      res_matrix,
+      2,
+      stats::quantile,
+      probs = lo_prob,
+      na.rm = TRUE,
+      names = FALSE
+    )
+    
+    pct_ci_hi <- apply(
+      res_matrix,
+      2,
+      stats::quantile,
+      probs = hi_prob,
+      na.rm = TRUE,
+      names = FALSE
+    )
+    
+    # Wald CIs
+    z <- stats::qnorm(1 - alpha_ci / 2)
+    ci_lo <- overall_quantile_res$estimate - z * se
+    ci_hi <- overall_quantile_res$estimate + z * se
+  }
   
   res <- data.frame(
     quantile = alpha_grid,

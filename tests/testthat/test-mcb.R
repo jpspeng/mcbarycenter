@@ -198,6 +198,35 @@ test_that("mcbary uses cluster bootstrap resampling by default", {
   expect_equal(nrow(fit$res), 3)
 })
 
+test_that("mcbary allows one bootstrap draw and leaves uncertainty outputs blank", {
+  input <- data.frame(
+    id = c(1, 1, 1, 2, 2, 2, 3, 3, 3),
+    value = c(1, 2, 3, 2, 3, 4, 1, 4, 5)
+  )
+
+  fit <- mcbary(
+    df = input,
+    id_col = "id",
+    val_col = "value",
+    method = "raw",
+    x_grid = 1:5,
+    bootstrap_samples = 1,
+    alpha_grid = c(0.25, 0.5, 0.75),
+    progress = FALSE
+  )
+
+  expect_equal(nrow(fit$res), 3)
+  expect_false(any(is.na(fit$res$estimate)))
+  expect_true(all(is.na(fit$res$estimate_bs)))
+  expect_true(all(is.na(fit$res$se)))
+  expect_true(all(is.na(fit$res$ci_lo)))
+  expect_true(all(is.na(fit$res$ci_hi)))
+  expect_true(all(is.na(fit$res$pct_ci_lo)))
+  expect_true(all(is.na(fit$res$pct_ci_hi)))
+  expect_true(all(is.na(fit$cov)))
+  expect_equal(dim(fit$cov), c(3, 3))
+})
+
 test_that("est_dist_alpha returns x, pmf, and cdf and matches mean helper", {
   mixture_res <- list(
     "1" = data.frame(theta = c(0, 0.5, 1), g = c(0.2, 0.3, 0.5), cumul = c(0.2, 0.5, 1)),

@@ -98,8 +98,8 @@ graph_quantiles <- function(..., show_ci = TRUE) {
   ) +
     ggplot2::geom_line() +
     ggplot2::labs(
-      x = "Quantile",
-      y = "Quantile level",
+      x = "Quantile level",
+      y = "Quantile value",
       color = NULL,
       fill = NULL
     )
