@@ -198,6 +198,32 @@ test_that("mcbary uses cluster bootstrap resampling by default", {
   expect_equal(nrow(fit$res), 3)
 })
 
+test_that("mcbary accepts non-default weight column names", {
+  input <- data.frame(
+    grp = c(1, 1, 2, 2, 3, 3),
+    value = c(1, 2, 2, 3, 3, 4),
+    wts = c(1, 1, 2, 2, 3, 3)
+  )
+
+  fit <- mcbary(
+    df = input,
+    id_col = "grp",
+    val_col = "value",
+    method = "raw",
+    x_grid = 1:3,
+    weight_col = "wts",
+    bootstrap_samples = 2,
+    alpha_grid = c(0.25, 0.5),
+    progress = FALSE
+  )
+
+  expect_true(is.list(fit))
+  expect_named(fit$res, c(
+    "quantile", "estimate", "estimate_bs", "se", "ci_lo",
+    "ci_hi", "pct_ci_lo", "pct_ci_hi"
+  ))
+})
+
 test_that("mcbary allows one bootstrap draw and leaves uncertainty outputs blank", {
   input <- data.frame(
     id = c(1, 1, 1, 2, 2, 2, 3, 3, 3),

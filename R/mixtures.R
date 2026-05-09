@@ -17,8 +17,8 @@ estimate_mixture_efron <- function(df,
                                    val_col = "x",
                                    x_thresh,
                                    tau = seq(from = 0.005, to = 0.995, by = 0.005),
-                                   pDegree = 7,
-                                   c0 = 1,
+                                   pDegree = 5,
+                                   c0 = 0.001,
                                    weight_col = NULL) {
   tau <- sort(unique(as.numeric(tau)))
 
@@ -32,11 +32,12 @@ estimate_mixture_efron <- function(df,
     val_col = val_col,
     weight_col = weight_col
   )
+  std_weight_col <- if (is.null(weight_col)) NULL else "weight"
 
   df_bin <- .aggregate_binomial_data(
     df = df,
     x_thresh = x_thresh,
-    weight_col = weight_col
+    weight_col = std_weight_col
   )
 
   .estimate_mixture_efron_from_binomial(
@@ -86,11 +87,12 @@ estimate_mixture_npmle <- function(df,
     val_col = val_col,
     weight_col = weight_col
   )
+  std_weight_col <- if (is.null(weight_col)) NULL else "weight"
   
   df_bin <- .aggregate_binomial_data(
     df = df,
     x_thresh = x_thresh,
-    weight_col = weight_col
+    weight_col = std_weight_col
   )
 
   .estimate_mixture_npmle_from_binomial(
@@ -124,11 +126,12 @@ estimate_mixture_raw <- function(df,
     val_col = val_col,
     weight_col = weight_col
   )
+  std_weight_col <- if (is.null(weight_col)) NULL else "weight"
 
   df_bin <- .aggregate_binomial_data(
     df = df,
     x_thresh = x_thresh,
-    weight_col = weight_col
+    weight_col = std_weight_col
   )
 
   .estimate_mixture_raw_from_binomial(df_bin = df_bin)
@@ -165,11 +168,12 @@ estimate_mixture_beta <- function(df,
     val_col = val_col,
     weight_col = weight_col
   )
+  std_weight_col <- if (is.null(weight_col)) NULL else "weight"
 
   df_bin <- .aggregate_binomial_data(
     df = df,
     x_thresh = x_thresh,
-    weight_col = weight_col
+    weight_col = std_weight_col
   )
 
   .estimate_mixture_beta_from_binomial(df_bin = df_bin, tau = tau)
@@ -202,11 +206,12 @@ estimate_all_mixtures <- function(df,
     val_col = val_col,
     weight_col = weight_col
   )
+  std_weight_col <- if (is.null(weight_col)) NULL else "weight"
 
   precomputed <- .precompute_binomial_grid(
     df = df,
     x_grid = x_grid,
-    weight_col = weight_col
+    weight_col = std_weight_col
   )
 
   .estimate_all_mixtures_from_precomputed(
@@ -218,8 +223,8 @@ estimate_all_mixtures <- function(df,
 
 .estimate_mixture_efron_from_binomial <- function(df_bin,
                                                   tau = seq(from = 0.005, to = 0.995, by = 0.005),
-                                                  pDegree = 7,
-                                                  c0 = 1,
+                                                  pDegree = 5,
+                                                  c0 = 0.001,
                                                   aStart = 1.0,
                                                   deconv_cache = NULL,
                                                   compute_stats = TRUE) {
@@ -477,8 +482,8 @@ estimate_all_mixtures <- function(df,
   if (identical(method, "spline")) {
     args <- list(...)
     tau <- if ("tau" %in% names(args)) args$tau else seq(from = 0.005, to = 0.995, by = 0.005)
-    pDegree <- if ("pDegree" %in% names(args)) args$pDegree else 7
-    spline_c0 <- if ("c0" %in% names(args)) args$c0 else 1
+    pDegree <- if ("pDegree" %in% names(args)) args$pDegree else 5
+    spline_c0 <- if ("c0" %in% names(args)) args$c0 else 0.001
     spline_disable_warm_start <- is.numeric(spline_c0) &&
       length(spline_c0) == 1L &&
       !is.na(spline_c0) &&
@@ -642,7 +647,7 @@ estimate_all_mixtures <- function(df,
 
 .make_spline_deconv_cache <- function(n,
                                       tau = seq(from = 0.005, to = 0.995, by = 0.005),
-                                      pDegree = 7,
+                                      pDegree = 5,
                                       scale = TRUE) {
   tau <- sort(unique(as.numeric(tau)))
   Q <- splines::ns(tau, pDegree)

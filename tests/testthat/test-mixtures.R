@@ -54,3 +54,42 @@ test_that("estimate_all_mixtures passes weights to spline method", {
   expect_true("0.5" %in% names(fit))
   expect_named(fit[["0.5"]], c("theta", "g", "cumul"))
 })
+
+test_that("mixture estimators accept non-default weight column names", {
+  df <- data.frame(
+    grp = c("a", "a", "b", "b", "c", "c"),
+    val = c(0, 1, 0, 1, 1, 1),
+    wts = c(1, 1, 4, 4, 1, 1)
+  )
+
+  fit_raw <- estimate_mixture_raw(
+    df = df,
+    id_col = "grp",
+    val_col = "val",
+    x_thresh = 0.5,
+    weight_col = "wts"
+  )
+
+  fit_beta <- estimate_mixture_beta(
+    df = df,
+    id_col = "grp",
+    val_col = "val",
+    x_thresh = 0.5,
+    tau = seq(0.1, 0.9, by = 0.2),
+    weight_col = "wts"
+  )
+
+  fit_all <- estimate_all_mixtures(
+    df = df,
+    id_col = "grp",
+    val_col = "val",
+    method = "raw",
+    x_grid = 0.5,
+    weight_col = "wts"
+  )
+
+  expect_named(fit_raw, c("theta", "g", "cumul"))
+  expect_named(fit_beta, c("theta", "g", "cumul"))
+  expect_true(is.list(fit_all))
+  expect_true("0.5" %in% names(fit_all))
+})

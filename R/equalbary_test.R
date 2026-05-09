@@ -121,15 +121,32 @@ equalbary_test <- function(bary_res1,
   }
   
   scaled_diff <- sqrt(n) * diff_est
-  T_obs_sup <- max(abs(scaled_diff))
-  T_obs_int <- trapz(alpha1, scaled_diff^2)
+  
+  # Pointwise standard deviation of sqrt(n) * diff_est
+  sd_scaled <- sqrt(diag(Sigma))
+  
+  if (any(!is.finite(sd_scaled)) || any(sd_scaled <= 0)) {
+    stop(
+      "Some pointwise standard errors are nonpositive or nonfinite.",
+      call. = FALSE
+    )
+  }
+  
+  # Standardized observed process
+  scaled_diff_std <- scaled_diff / sd_scaled
+  T_obs_sup <- max(abs(scaled_diff_std))
+  T_obs_int <- trapz(alpha1, scaled_diff_std^2)
   T_obs_hotelling <- as.numeric(t(diff_est) %*% cov_diff_ginv %*% diff_est)
-
+  
+  # Simulate null process for sqrt(n) * diff_est
   Z <- matrix(rnorm(length(diff_est) * B), nrow = length(diff_est))
   G <- root %*% Z
-  T_sim_sup <- apply(abs(G), 2, max)
-  T_sim_int <- apply(G, 2, function(g) trapz(alpha1, g^2))
-
+  
+  # Standardize simulated null process pointwise
+  G_std <- sweep(G, 1, sd_scaled, "/")
+  T_sim_sup <- apply(abs(G_std), 2, max)
+  T_sim_int <- apply(G_std, 2, function(g) trapz(alpha1, g^2))
+  
   pval_sup <- mean(T_sim_sup >= T_obs_sup)
   pval_int <- mean(T_sim_int >= T_obs_int)
   pval_hotelling <- stats::pchisq(

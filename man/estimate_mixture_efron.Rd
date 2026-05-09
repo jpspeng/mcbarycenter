@@ -8,8 +8,8 @@ estimate_mixture_efron(
   val_col = "x",
   x_thresh,
   tau = seq(from = 0.005, to = 0.995, by = 0.005),
-  pDegree = 7,
-  c0 = 1,
+  pDegree = 5,
+  c0 = 0.001,
   weight_col = NULL
 )
 }

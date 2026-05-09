@@ -19,7 +19,10 @@ Imports:
     splines,
     VGAM
 Suggests:
+    knitr,
+    rmarkdown,
     testthat,
     REBayes, 
     Rmosek
+VignetteBuilder: knitr
 LazyData: true

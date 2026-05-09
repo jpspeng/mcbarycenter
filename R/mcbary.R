@@ -262,6 +262,7 @@ mcbary <- function(df,
     val_col = val_col,
     weight_col = weight_col
   )
+  std_weight_col <- if (is.null(weight_col)) NULL else "weight"
   
   if (!is.numeric(bootstrap_samples) || length(bootstrap_samples) != 1 ||
       is.na(bootstrap_samples) || bootstrap_samples < 1) {
@@ -324,7 +325,7 @@ mcbary <- function(df,
     precomputed_grid <- .precompute_binomial_grid(
       df = df,
       x_grid = x_grid_overall,
-      weight_col = weight_col
+      weight_col = std_weight_col
     )
 
     overall_mixture_res <- .estimate_all_mixtures_from_precomputed(
@@ -339,7 +340,7 @@ mcbary <- function(df,
       val_col = "x",
       method = method,
       x_grid = x_grid_overall,
-      weight_col = weight_col,
+      weight_col = std_weight_col,
       ...
     )
   }
@@ -418,7 +419,7 @@ mcbary <- function(df,
         val_col = "x",
         method = method,
         x_grid = x_grid_boot,
-        weight_col = weight_col,
+        weight_col = std_weight_col,
         ...
       )
     }
