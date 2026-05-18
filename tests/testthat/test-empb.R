@@ -16,6 +16,7 @@ test_that("empbary averages grouped quantiles and computes Wald intervals", {
   expected_se <- c(2, 2, 2)
   z_value <- qnorm(0.975)
 
+  expect_s3_class(result, "empbary_result")
   expect_identical(
     names(result),
     c("res", "cov", "data")
@@ -41,6 +42,7 @@ test_that("empbary drops groups with only missing values", {
     alpha_grid = c(0, 0.5, 1)
   )
 
+  expect_s3_class(result, "empbary_result")
   expect_equal(result$res$estimate, c(1, 1, 3))
   expect_true(all(is.na(result$res$se)))
   expect_equal(result$data, data.frame(id = df$id, val = df$value))
@@ -62,6 +64,7 @@ test_that("empbary computes a weighted barycenter when weight_col is supplied", 
     quantile_type = 3
   )
 
+  expect_s3_class(result, "empbary_result")
   expected_estimate <- c(4, 4, 6)
   expected_cov <- matrix(
     c(5, 5, 5,
@@ -78,6 +81,20 @@ test_that("empbary computes a weighted barycenter when weight_col is supplied", 
   expect_equal(result$res$ci_hi, expected_estimate + z_value * expected_se)
   expect_equal(result$cov, expected_cov)
   expect_equal(result$data, data.frame(id = df$id, val = df$value, weight = df$weight))
+})
+
+test_that("empbary_result has a custom print method", {
+  result <- structure(
+    list(
+      res = data.frame(quantile = c(0.25, 0.5), estimate = c(1, 2)),
+      cov = diag(2),
+      data = data.frame(id = c("a", "a"), val = c(1, 2))
+    ),
+    class = "empbary_result"
+  )
+
+  expect_output(print(result), "<empbary_result>")
+  expect_output(print(result), "Quantiles: 2")
 })
 
 test_that("empbary requires weights to be homogeneous within id", {

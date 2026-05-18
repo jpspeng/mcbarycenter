@@ -9,8 +9,8 @@ graph_mixtures(
 )
 }
 \arguments{
-\item{mcb_res}{A result list containing a \code{mixtures} component, such as the
-output of \code{\link{mcbary}}.}
+\item{mcb_res}{An object of class \code{"mcbary_result"}, such as the output of
+\code{\link{mcbary}}.}
 
 \item{layout}{Either \code{"combined"} to plot all mixing distributions on one
 graph, or \code{"individual"} to return one graph per mixing distribution.}

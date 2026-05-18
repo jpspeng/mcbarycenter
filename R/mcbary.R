@@ -228,11 +228,11 @@ est_all_quantiles <- function(mixture_res,
 #' @param ci_level Confidence level.
 #' @param ... Additional arguments passed to [estimate_all_mixtures()].
 #'
-#' @return A list with components `res`, `cov`, `mixtures`, `method`, and
-#'   `data`. `res` is a data frame with columns `quantile`, `estimate`,
-#'   `estimate_bs`, `se`, `ci_lo`, `ci_hi`, `pct_ci_lo`, and `pct_ci_hi`.
-#'   `data` contains the original `id_col` and `val_col` columns from the
-#'   input.
+#' @return An S3 object of class `"mcbary_result"` with components `res`,
+#'   `cov`, `mixtures`, `method`, and `data`. `res` is a data frame with
+#'   columns `quantile`, `estimate`, `estimate_bs`, `se`, `ci_lo`, `ci_hi`,
+#'   `pct_ci_lo`, and `pct_ci_hi`. `data` contains the original `id_col` and
+#'   `val_col` columns from the input.
 #' @export
 mcbary <- function(df,
                 id_col = "id",
@@ -508,11 +508,14 @@ mcbary <- function(df,
     )
   }
   
-  list(
+  structure(
+    list(
     res = res,
     cov = cov_mat,
     mixtures = overall_mixture_res,
     method = method,
     data = data_out
+    ),
+    class = "mcbary_result"
   )
 }

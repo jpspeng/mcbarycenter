@@ -11,6 +11,26 @@ test_that("graph_quantiles returns a ggplot object", {
   expect_s3_class(plot, "ggplot")
 })
 
+test_that("graph_quantiles accepts S3 barycenter results", {
+  fit <- structure(
+    list(
+      res = data.frame(
+        quantile = c(0, 0.5, 1),
+        estimate = c(1, 2, 3),
+        ci_lo = c(0.8, 1.7, 2.5),
+        ci_hi = c(1.2, 2.3, 3.5)
+      ),
+      cov = diag(3),
+      data = data.frame(id = c("a", "a"), val = c(1, 3))
+    ),
+    class = "empbary_result"
+  )
+
+  plot <- graph_quantiles(fit)
+
+  expect_s3_class(plot, "ggplot")
+})
+
 test_that("graph_quantiles can combine result frames with different extra columns", {
   df1 <- data.frame(
     quantile = c(0, 0.5, 1),
@@ -88,11 +108,14 @@ test_that("graph_quantiles still requires confidence interval columns when enabl
 })
 
 test_that("graph_mixtures returns a combined ggplot", {
-  fit <- list(
-    mixtures = list(
-      "1" = data.frame(theta = c(0, 0.5, 1), cumul = c(0.2, 0.7, 1)),
-      "2" = data.frame(theta = c(0, 0.5, 1), cumul = c(0.1, 0.8, 1))
-    )
+  fit <- structure(
+    list(
+      mixtures = list(
+        "1" = data.frame(theta = c(0, 0.5, 1), cumul = c(0.2, 0.7, 1)),
+        "2" = data.frame(theta = c(0, 0.5, 1), cumul = c(0.1, 0.8, 1))
+      )
+    ),
+    class = "mcbary_result"
   )
   
   plot <- graph_mixtures(fit, layout = "combined")
@@ -104,11 +127,14 @@ test_that("graph_mixtures returns a combined ggplot", {
 })
 
 test_that("graph_mixtures returns individual ggplots with titled names", {
-  fit <- list(
-    mixtures = list(
-      "0.5" = data.frame(theta = c(0, 1), cumul = c(0.3, 1)),
-      "1.0" = data.frame(theta = c(0, 1), cumul = c(0.4, 1))
-    )
+  fit <- structure(
+    list(
+      mixtures = list(
+        "0.5" = data.frame(theta = c(0, 1), cumul = c(0.3, 1)),
+        "1.0" = data.frame(theta = c(0, 1), cumul = c(0.4, 1))
+      )
+    ),
+    class = "mcbary_result"
   )
   
   plots <- graph_mixtures(fit, layout = "individual")
@@ -127,11 +153,24 @@ test_that("graph_mixtures subsamples to about 10 by default and can show all", {
     data.frame(theta = c(0, 1), cumul = c(i / 20, 1))
   })
   names(mixtures) <- as.character(seq_len(15))
-  fit <- list(mixtures = mixtures)
+  fit <- structure(list(mixtures = mixtures), class = "mcbary_result")
   
   plot_subset <- graph_mixtures(fit, layout = "combined")
   plot_all <- graph_mixtures(fit, layout = "combined", show_all = TRUE)
   
   expect_length(levels(plot_subset$data$.mixture), 10)
   expect_length(levels(plot_all$data$.mixture), 15)
+})
+
+test_that("graph_mixtures requires an mcbary_result object", {
+  fit <- list(
+    mixtures = list(
+      "1" = data.frame(theta = c(0, 1), cumul = c(0.2, 1))
+    )
+  )
+
+  expect_error(
+    graph_mixtures(fit),
+    "`mcb_res` must be an object of class `mcbary_result`."
+  )
 })

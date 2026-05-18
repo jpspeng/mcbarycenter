@@ -1,6 +1,7 @@
 test_that("mcbary returns mixtures, method, and filtered original data", {
   set.seed(1)
-  input <- sample_data[1:40, ]
+  data("example_subject_data", package = "mcbarycenter")
+  input <- example_subject_data[1:40, ]
   input$group_id <- input$id
   input$extra <- seq_len(nrow(input))
   
@@ -15,6 +16,7 @@ test_that("mcbary returns mixtures, method, and filtered original data", {
     progress = FALSE
   )
   
+  expect_s3_class(fit, "mcbary_result")
   expect_true(is.list(fit))
   expect_true("mixtures" %in% names(fit))
   expect_true("method" %in% names(fit))
@@ -187,6 +189,7 @@ test_that("mcbary uses cluster bootstrap resampling by default", {
     progress = FALSE
   )
 
+  expect_s3_class(fit, "mcbary_result")
   expect_true(is.list(fit))
   expect_named(
     fit$res,
@@ -217,11 +220,28 @@ test_that("mcbary accepts non-default weight column names", {
     progress = FALSE
   )
 
+  expect_s3_class(fit, "mcbary_result")
   expect_true(is.list(fit))
   expect_named(fit$res, c(
     "quantile", "estimate", "estimate_bs", "se", "ci_lo",
     "ci_hi", "pct_ci_lo", "pct_ci_hi"
   ))
+})
+
+test_that("mcbary_result has a custom print method", {
+  fit <- structure(
+    list(
+      res = data.frame(quantile = c(0.25, 0.5), estimate = c(1, 2)),
+      cov = diag(2),
+      mixtures = list("1" = data.frame(theta = 0, g = 1, cumul = 1)),
+      method = "raw",
+      data = data.frame(id = c(1, 1), val = c(1, 2))
+    ),
+    class = "mcbary_result"
+  )
+
+  expect_output(print(fit), "<mcbary_result>")
+  expect_output(print(fit), "Method: raw")
 })
 
 test_that("mcbary allows one bootstrap draw and leaves uncertainty outputs blank", {

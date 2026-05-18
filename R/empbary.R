@@ -13,7 +13,7 @@
 #' @param quantile_type The `type` argument passed to [stats::quantile()].
 #'   Defaults to `1`.
 #'
-#' @return A list with:
+#' @return An S3 object of class `"empbary_result"` with:
 #' \describe{
 #'   \item{res}{A data frame with columns `quantile`, `estimate`, `se`,
 #'   `ci_lo`, and `ci_hi`.}
@@ -198,9 +198,12 @@ empbary <- function(
     row.names = NULL
   )
   
-  list(
+  structure(
+    list(
     res = res,
     cov = cov_mat,
     data = data_out
+    ),
+    class = "empbary_result"
   )
 }

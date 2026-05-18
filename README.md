@@ -4,7 +4,7 @@ This package implements the marginal corrected barycenter (MCB) estimator.
 
 ## Install
 
-```{r}
+```r
 devtools::install_github("jpspeng/mcbarycenter")
 ```
 
@@ -21,9 +21,9 @@ Example:
 
 ```r
 library(mcbarycenter)
-data("sample_data")
+data("example_subject_data")
 
-mcbary(sample_data,
+mcbary(example_subject_data,
     id_col = "id",
     val_col = "value",
     method = "npmle",

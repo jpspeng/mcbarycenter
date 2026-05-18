@@ -21,5 +21,5 @@ sim_data <- do.call(rbind, lapply(1:n_id, function(i) {
   )
 }))
 
-sample_data <- sim_data
-save(sample_data, file = "data/sample_data.rda")
+example_subject_data <- sim_data
+save(example_subject_data, file = "data/example_subject_data.rda")
