@@ -1,7 +1,7 @@
 test_that("mcbary returns mixtures, method, and filtered original data", {
   set.seed(1)
-  data("example_subject_data", package = "mcbarycenter")
-  input <- example_subject_data[1:40, ]
+  data("sparse_dist_data", package = "mcbarycenter")
+  input <- sparse_dist_data[1:40, ]
   input$group_id <- input$id
   input$extra <- seq_len(nrow(input))
   

@@ -21,9 +21,9 @@ Example:
 
 ```r
 library(mcbarycenter)
-data("example_subject_data")
+data("sparse_dist_data")
 
-mcbary(example_subject_data,
+mcbary(sparse_dist_data,
     id_col = "id",
     val_col = "value",
     method = "npmle",
