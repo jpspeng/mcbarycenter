@@ -1,0 +1,180 @@
+---
+title: "Getting started with `mcbarycenter` package"
+output:
+  rmarkdown::html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+vignette: >
+  %\VignetteIndexEntry{Getting Started}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r}
+library(mcbarycenter)
+```
+
+# Introduction
+
+Placeholder description of the method. This section will be filled in with a
+more complete overview later.
+
+`mcbarycenter` implements the method for calculating the quantile function of
+barycenters using both the empirical barycenter and the MCB estimator. The
+package also provides tools for calculating quantile differences, graphing
+results, and carrying out hypothesis tests to compare barycenters across groups 
+of distributions.
+
+Some functionality depends on external packages. In particular, `REBayes` and
+`Rmosek` can be used to make the NPMLE workflow run faster. We also use ideas
+from `deconvolveR`, but rewrote the relevant function to make it faster for the
+setting used in this package.
+
+The examples below use the bundled `sparse_dist_data` data set.
+
+```{r}
+data("sparse_dist_data")
+head(sparse_dist_data)
+```
+
+# Estimating the barycenter quantile function
+
+## Empirical Barycenter
+
+The `empbary()` function computes empirical quantiles within each subject or
+group and then averages those quantiles across groups.
+
+Arguments:
+
+- `df`: the input data frame.
+- `id_col`: the column identifying subjects or groups.
+- `val_col`: the column containing the numeric observations.
+- `weight_col`: an optional column containing group weights; if omitted, the
+  empirical barycenter is unweighted.
+- `alpha_grid`: the grid of quantile levels to estimate.
+- `quantile_type`: the `type` argument passed to `stats::quantile()`.
+
+Example:
+
+```{r}
+emp_res <- empbary(
+  df = sparse_dist_data,
+  id_col = "id",
+  val_col = "value"
+)
+
+head(emp_res$res)
+```
+
+## Marginal-constructed barycenter
+
+The `mcbary()` function estimates the barycenter quantile function using the
+marginal-corrected barycenter procedure.
+
+Arguments:
+
+- `df`: the input data frame.
+- `id_col`: the column identifying subjects or groups.
+- `val_col`: the column containing the observed numeric values.
+- `method`: the mixture estimation method; options include `"spline"`,
+  `"npmle"`, `"raw"`, and `"beta"`.
+- `x_grid`: the threshold grid to use when `cutpoints` is not supplied.
+- `cutpoints`: the number of evenly spaced thresholds constructed from the
+  observed data range; either `cutpoints` or `x_grid` must be supplied.
+- `bootstrap_samples`: the number of bootstrap resamples used for uncertainty
+  estimation.
+- `alpha_grid`: the grid of quantile levels to estimate.
+- `use_midpoint`: whether to use interval midpoints when constructing the
+  quantile distribution.
+- `estimate_endpoints`: whether to estimate the endpoint support regions.
+- `use_isotonic_dist`: whether to enforce monotonicity on the cumulative
+  mixture curves before converting them to quantile distributions.
+- `use_isotonic_output`: whether to enforce monotonicity on the final
+  estimated quantile curve and confidence bounds.
+- `weight_col`: an optional column containing id-level weights.
+- `progress`: whether to display a bootstrap progress bar.
+- `ci_level`: the confidence level used for reported intervals.
+- `...`: additional arguments passed to the mixture estimation routine.
+
+```{r}
+bary_res <- mcbary(
+  df = sparse_dist_data,
+  id_col = "id",
+  val_col = "value",
+  method = "spline",
+  cutpoints = 20,
+  bootstrap_samples = 2,
+  progress = FALSE
+)
+
+head(bary_res$res)
+```
+
+The estimated quantile curve is stored in `bary_res$res`. The full object also
+contains bootstrap-based uncertainty summaries, the estimated mixing
+distributions, and the covariance matrix used by downstream comparison tools.
+
+# Graphing tools
+
+The package includes helpers for plotting both the estimated barycenter
+quantiles and the intermediate mixing distributions.
+
+```{r}
+graph_quantiles(bary_res)
+```
+
+```{r}
+graph_mixtures(bary_res)
+```
+
+# Comparing barycenters
+
+To compare barycenters across samples, we first estimate each barycenter on the
+same quantile grid and then apply `equalbary_test()`. The example below splits
+the sample by odd and even subject identifiers only to illustrate the workflow.
+
+```{r}
+odd_ids <- unique(sparse_dist_data$id)[unique(sparse_dist_data$id) %% 2 == 1]
+even_ids <- unique(sparse_dist_data$id)[unique(sparse_dist_data$id) %% 2 == 0]
+
+sample_odd <- subset(sparse_dist_data, id %in% odd_ids)
+sample_even <- subset(sparse_dist_data, id %in% even_ids)
+
+bary_odd <- mcbary(
+  sample_odd,
+  id_col = "id",
+  val_col = "value",
+  method = "raw",
+  cutpoints = 10,
+  bootstrap_samples = 2,
+  progress = FALSE
+)
+
+bary_even <- mcbary(
+  sample_even,
+  id_col = "id",
+  val_col = "value",
+  method = "raw",
+  cutpoints = 10,
+  bootstrap_samples = 2,
+  progress = FALSE
+)
+
+graph_quantiles(odd = bary_odd, even = bary_even)
+```
+
+```{r}
+comparison <- equalbary_test(bary_odd, bary_even, B = 50, seed = 1)
+
+comparison$sup_norm$pval
+comparison$int_sq_norm$pval
+comparison$hotelling$pval
+```
