@@ -65,13 +65,23 @@ Arguments:
 Example:
 
 ```{r}
-emp_res <- empbary(
-  df = sparse_dist_data,
+sample_grp0 <- subset(sparse_dist_data, group == 0)
+sample_grp1 <- subset(sparse_dist_data, group == 1)
+
+emp_res_grp0 <- empbary(
+  df = sample_grp0,
   id_col = "id",
   val_col = "value"
 )
 
-head(emp_res$res)
+emp_res_grp1 <- empbary(
+  df = sample_grp1,
+  id_col = "id",
+  val_col = "value"
+)
+
+head(emp_res_grp0$res)
+head(emp_res_grp1$res)
 ```
 
 ## Marginal-constructed barycenter
@@ -105,22 +115,38 @@ Arguments:
 - `...`: additional arguments passed to the mixture estimation routine.
 
 ```{r}
-bary_res <- mcbary(
-  df = sparse_dist_data,
+mcb_res_grp0 <- mcbary(
+  df = sample_grp0,
   id_col = "id",
   val_col = "value",
-  method = "spline",
-  cutpoints = 20,
-  bootstrap_samples = 2,
+  method = "beta",
+  cutpoints = 100,
+  use_midpoint = T, 
+  estimate_endpoints = T, 
+  bootstrap_samples = 20,
   progress = FALSE
 )
 
-head(bary_res$res)
+mcb_res_grp1 <- mcbary(
+  df = sample_grp1,
+  id_col = "id",
+  val_col = "value",
+  method = "beta",
+  cutpoints = 100,
+  use_midpoint = T,
+  estimate_endpoints = T, 
+  bootstrap_samples = 20,
+  progress = FALSE
+)
+
+head(mcb_res_grp0$res)
+head(mcb_res_grp1$res)
 ```
 
-The estimated quantile curve is stored in `bary_res$res`. The full object also
-contains bootstrap-based uncertainty summaries, the estimated mixing
-distributions, and the covariance matrix used by downstream comparison tools.
+The estimated quantile curves are stored in `mcb_res_grp0$res` and
+`mcb_res_grp1$res`. Each full result object also contains bootstrap-based
+uncertainty summaries, the estimated mixing distributions, and the covariance
+matrix used by downstream comparison tools.
 
 # Graphing tools
 
@@ -128,51 +154,26 @@ The package includes helpers for plotting both the estimated barycenter
 quantiles and the intermediate mixing distributions.
 
 ```{r}
-graph_quantiles(bary_res)
+graph_quantiles(
+  emp_grp0 = emp_res_grp0,
+  emp_grp1 = emp_res_grp1,
+  mcb_grp0 = mcb_res_grp0,
+  mcb_grp1 = mcb_res_grp1
+)
 ```
 
 ```{r}
-graph_mixtures(bary_res)
+graph_mixtures(mcb_res_grp0)
 ```
 
 # Comparing barycenters
 
 To compare barycenters across samples, we first estimate each barycenter on the
-same quantile grid and then apply `equalbary_test()`. The example below splits
-the sample by odd and even subject identifiers only to illustrate the workflow.
+same quantile grid and then apply `equalbary_test()`. Here we compare the two
+groups in `sparse_dist_data` directly.
 
 ```{r}
-odd_ids <- unique(sparse_dist_data$id)[unique(sparse_dist_data$id) %% 2 == 1]
-even_ids <- unique(sparse_dist_data$id)[unique(sparse_dist_data$id) %% 2 == 0]
-
-sample_odd <- subset(sparse_dist_data, id %in% odd_ids)
-sample_even <- subset(sparse_dist_data, id %in% even_ids)
-
-bary_odd <- mcbary(
-  sample_odd,
-  id_col = "id",
-  val_col = "value",
-  method = "raw",
-  cutpoints = 10,
-  bootstrap_samples = 2,
-  progress = FALSE
-)
-
-bary_even <- mcbary(
-  sample_even,
-  id_col = "id",
-  val_col = "value",
-  method = "raw",
-  cutpoints = 10,
-  bootstrap_samples = 2,
-  progress = FALSE
-)
-
-graph_quantiles(odd = bary_odd, even = bary_even)
-```
-
-```{r}
-comparison <- equalbary_test(bary_odd, bary_even, B = 50, seed = 1)
+comparison <- equalbary_test(mcb_res_grp0, mcb_res_grp1, B = 1000, seed = 1)
 
 comparison$sup_norm$pval
 comparison$int_sq_norm$pval
