@@ -1,5 +1,6 @@
 ---
 title: "Getting started with `mcbarycenter` package"
+author: James Peng, Florian Stijven
 output:
   rmarkdown::html_document:
     toc: true
@@ -24,17 +25,25 @@ library(mcbarycenter)
 
 # Introduction
 
-Placeholder description of the method. This section will be filled in with a
-more complete overview later.
+The `mcbarycenter` package implements a method for estimating the quantile
+function of the Wasserstein barycenter using the marginal-constructed
+barycenter (MCB) procedure. Briefly, the estimator can be used in sparse
+sampling settings, in which each distribution is represented only through a
+potentially small i.i.d. sample. The estimator works by first estimating a
+series of binomial mixing distributions using a beta parametric specification,
+a spline parametric specification, or the NPMLE. It then combines those mixing
+distributions to estimate the Wasserstein barycenter.
 
-`mcbarycenter` implements the method for calculating the quantile function of
-barycenters using both the empirical barycenter and the MCB estimator. The
-package also provides tools for calculating quantile differences, graphing
-results, and carrying out hypothesis tests to compare barycenters across groups 
-of distributions.
+For more details, please see [cite paper].
+
+The `mcbarycenter` package estimates the quantile function of the Wasserstein
+barycenter using either the empirical barycenter or the MCB estimator. In
+addition, the package provides tools for calculating quantile differences,
+graphing results, and carrying out hypothesis tests to compare barycenters
+across groups of distributions.
 
 Some functionality depends on external packages. In particular, `REBayes` and
-`Rmosek` can be used to make the NPMLE workflow run faster. We also use ideas
+`Rmosek` can be used to make the NPMLE workflow run faster. We also use starter code
 from `deconvolveR`, but rewrote the relevant function to make it faster for the
 setting used in this package.
 
@@ -45,9 +54,13 @@ data("sparse_dist_data")
 head(sparse_dist_data)
 ```
 
+Note that the data set must be in long format, with one column specifying the
+ids of the distributions and another column specifying the i.i.d. samples from
+those distributions.
+
 # Estimating the barycenter quantile function
 
-## Empirical Barycenter
+## Empirical barycenter
 
 The `empbary()` function computes empirical quantiles within each subject or
 group and then averages those quantiles across groups.
@@ -61,6 +74,12 @@ Arguments:
   empirical barycenter is unweighted.
 - `alpha_grid`: the grid of quantile levels to estimate.
 - `quantile_type`: the `type` argument passed to `stats::quantile()`.
+
+Returns: 
+
+- An `empbary_result` object containing the estimated quantile curve in
+  `res`, an estimated covariance matrix in `cov`, and the standardized input
+  data in `data`.
 
 Example:
 
@@ -83,6 +102,7 @@ emp_res_grp1 <- empbary(
 head(emp_res_grp0$res)
 head(emp_res_grp1$res)
 ```
+
 
 ## Marginal-constructed barycenter
 
@@ -114,6 +134,13 @@ Arguments:
 - `ci_level`: the confidence level used for reported intervals.
 - `...`: additional arguments passed to the mixture estimation routine.
 
+Returns: 
+
+- An `mcbary_result` object containing the estimated quantile curve and
+  uncertainty summaries in `res`, the bootstrap covariance matrix in `cov`,
+  the estimated mixing distributions in `mixtures`, the chosen estimation
+  method in `method`, and the standardized input data in `data`.
+
 ```{r}
 mcb_res_grp0 <- mcbary(
   df = sample_grp0,
@@ -121,8 +148,8 @@ mcb_res_grp0 <- mcbary(
   val_col = "value",
   method = "beta",
   cutpoints = 100,
-  use_midpoint = T, 
-  estimate_endpoints = T, 
+  use_midpoint = TRUE,
+  estimate_endpoints = TRUE,
   bootstrap_samples = 20,
   progress = FALSE
 )
@@ -133,8 +160,8 @@ mcb_res_grp1 <- mcbary(
   val_col = "value",
   method = "beta",
   cutpoints = 100,
-  use_midpoint = T,
-  estimate_endpoints = T, 
+  use_midpoint = TRUE,
+  estimate_endpoints = TRUE,
   bootstrap_samples = 20,
   progress = FALSE
 )
@@ -142,11 +169,6 @@ mcb_res_grp1 <- mcbary(
 head(mcb_res_grp0$res)
 head(mcb_res_grp1$res)
 ```
-
-The estimated quantile curves are stored in `mcb_res_grp0$res` and
-`mcb_res_grp1$res`. Each full result object also contains bootstrap-based
-uncertainty summaries, the estimated mixing distributions, and the covariance
-matrix used by downstream comparison tools.
 
 # Graphing tools
 
@@ -167,6 +189,23 @@ graph_mixtures(mcb_res_grp0)
 ```
 
 # Comparing barycenters
+
+To compare barycenters between groups of observations, we can use the `quantile_diff()`
+function, which calculates the quantile differences between the two groups.
+
+For example, we can compute the difference between the estimated MCB quantile
+functions for groups 0 and 1, and then graph the resulting quantile
+difference curve.
+
+```{r}
+quantile_diff_res <- quantile_diff(mcb_res_grp0, mcb_res_grp1)
+
+head(quantile_diff_res)
+```
+
+```{r}
+graph_quantiles(mcb_difference = quantile_diff_res)
+```
 
 To compare barycenters across samples, we first estimate each barycenter on the
 same quantile grid and then apply `equalbary_test()`. Here we compare the two
