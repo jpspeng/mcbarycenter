@@ -58,9 +58,9 @@ Note that the data set must be in long format, with one column specifying the
 ids of the distributions and another column specifying the i.i.d. samples from
 those distributions.
 
-# Estimating the barycenter quantile function
+# Estimating the Wasserstein barycenter quantile function
 
-## Empirical barycenter
+## Empirical Wasserstein barycenter
 
 The `empbary()` function computes empirical quantiles within each subject or
 group and then averages those quantiles across groups.
@@ -188,7 +188,7 @@ graph_quantiles(
 graph_mixtures(mcb_res_grp0)
 ```
 
-# Comparing barycenters
+# Comparing Wasserstein barycenters
 
 To compare barycenters between groups of observations, we can use the `quantile_diff()`
 function, which calculates the quantile differences between the two groups.
