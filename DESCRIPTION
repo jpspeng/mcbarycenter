@@ -19,7 +19,9 @@ Imports:
     splines,
     VGAM
 Suggests:
+    htmlwidgets,
     knitr,
+    plotly,
     rmarkdown,
     testthat,
     REBayes, 

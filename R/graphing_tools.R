@@ -124,6 +124,228 @@ graph_quantiles <- function(..., show_ci = TRUE) {
   return(p)
 }
 
+#' Plot Individual Empirical Quantile Curves
+#'
+#' Computes empirical quantile curves for each individual in a raw data frame
+#' and plots them either statically with ggplot2 or interactively with plotly.
+#'
+#' @param df A data frame.
+#' @param id_col A string giving the column name that identifies individuals.
+#' @param val_col A string giving the column name containing numeric values.
+#' @param alpha_grid A numeric vector of probabilities passed to [stats::quantile()].
+#'   Defaults to `seq(0.01, 0.99, 0.01)`.
+#' @param quantile_type The `type` argument passed to [stats::quantile()].
+#'   Defaults to `1`.
+#' @param interactive Logical; if `TRUE`, return an interactive plotly object.
+#'   If `FALSE`, return a ggplot object.
+#'
+#' @return A ggplot object if `interactive = FALSE`; otherwise a plotly htmlwidget.
+#' @export
+graph_individual_quantiles <- function(
+    df,
+    id_col,
+    val_col,
+    alpha_grid = seq(0.01, 0.99, 0.01),
+    quantile_type = 1,
+    interactive = TRUE
+) {
+  if (!is.data.frame(df)) {
+    stop("`df` must be a data frame.", call. = FALSE)
+  }
+
+  if (!is.character(id_col) || length(id_col) != 1L || !nzchar(id_col)) {
+    stop("`id_col` must be a single non-empty string.", call. = FALSE)
+  }
+
+  if (!is.character(val_col) || length(val_col) != 1L || !nzchar(val_col)) {
+    stop("`val_col` must be a single non-empty string.", call. = FALSE)
+  }
+
+  if (!id_col %in% names(df)) {
+    stop("`id_col` must name a column in `df`.", call. = FALSE)
+  }
+
+  if (!val_col %in% names(df)) {
+    stop("`val_col` must name a column in `df`.", call. = FALSE)
+  }
+
+  if (!is.numeric(df[[val_col]])) {
+    stop("`val_col` must refer to a numeric column.", call. = FALSE)
+  }
+
+  if (!is.numeric(alpha_grid) || length(alpha_grid) == 0L || anyNA(alpha_grid)) {
+    stop(
+      "`alpha_grid` must be a non-empty numeric vector without missing values.",
+      call. = FALSE
+    )
+  }
+
+  if (any(alpha_grid < 0 | alpha_grid > 1)) {
+    stop("`alpha_grid` values must lie between 0 and 1.", call. = FALSE)
+  }
+
+  if (!is.numeric(quantile_type) || length(quantile_type) != 1L || is.na(quantile_type)) {
+    stop("`quantile_type` must be a single numeric value.", call. = FALSE)
+  }
+
+  if (!is.logical(interactive) || length(interactive) != 1L || is.na(interactive)) {
+    stop("`interactive` must be a single TRUE/FALSE value.", call. = FALSE)
+  }
+
+  split_vals <- split(df[[val_col]], df[[id_col]])
+  split_vals <- Filter(function(x) any(!is.na(x)), split_vals)
+
+  if (length(split_vals) == 0L) {
+    stop(
+      "`df` must contain at least one group with non-missing values.",
+      call. = FALSE
+    )
+  }
+
+  quantile_df <- do.call(
+    rbind,
+    lapply(names(split_vals), function(id) {
+      values <- split_vals[[id]]
+      data.frame(
+        id = id,
+        quantile = alpha_grid,
+        estimate = stats::quantile(
+          values[!is.na(values)],
+          probs = alpha_grid,
+          type = quantile_type,
+          names = FALSE
+        ),
+        row.names = NULL
+      )
+    })
+  )
+
+  quantile_df$id <- factor(quantile_df$id, levels = unique(quantile_df$id))
+
+  if (!interactive) {
+    return(
+      ggplot2::ggplot(
+        quantile_df,
+        ggplot2::aes(
+          x = quantile,
+          y = estimate,
+          color = id,
+          group = id
+        )
+      ) +
+        ggplot2::geom_line(alpha = 0.2, linewidth = 0.4) +
+        ggplot2::labs(
+          x = "Quantile level",
+          y = "Quantile value",
+          color = "ID"
+        )
+    )
+  }
+
+  if (!requireNamespace("plotly", quietly = TRUE)) {
+    stop(
+      "`plotly` must be installed when `interactive = TRUE`.",
+      call. = FALSE
+    )
+  }
+
+  if (!requireNamespace("htmlwidgets", quietly = TRUE)) {
+    stop(
+      "`htmlwidgets` must be installed when `interactive = TRUE`.",
+      call. = FALSE
+    )
+  }
+
+  ids <- levels(quantile_df$id)
+  palette <- grDevices::hcl.colors(length(ids), palette = "Dynamic")
+  names(palette) <- ids
+
+  p <- plotly::plot_ly()
+
+  for (id in ids) {
+    d <- quantile_df[quantile_df$id == id, , drop = FALSE]
+
+    p <- plotly::add_trace(
+      p,
+      data = d,
+      x = ~quantile,
+      y = ~estimate,
+      type = "scatter",
+      mode = "lines",
+      name = id,
+      customdata = rep(id, nrow(d)),
+      hovertemplate = paste0(
+        "ID: ", id,
+        "<br>Quantile: %{x:.2f}",
+        "<br>Value: %{y:.3f}",
+        "<extra></extra>"
+      ),
+      line = list(
+        color = palette[[id]],
+        width = 1
+      ),
+      opacity = 0.2,
+      showlegend = TRUE
+    )
+  }
+
+  p <- plotly::layout(
+    p,
+    xaxis = list(title = "Quantile level"),
+    yaxis = list(title = "Quantile value"),
+    title = list(text = "Click a line to highlight its ID"),
+    hovermode = "closest"
+  )
+
+  htmlwidgets::onRender(
+    p,
+    "
+    function(el, x) {
+      var fadedOpacity = 0.2;
+      var fadedWidth = 1;
+      var activeOpacity = 1.0;
+      var activeWidth = 3;
+
+      function resetTraces(gd) {
+        for (var i = 0; i < gd.data.length; i++) {
+          Plotly.restyle(gd, {
+            opacity: fadedOpacity,
+            'line.width': fadedWidth
+          }, [i]);
+        }
+      }
+
+      el.on('plotly_click', function(evt) {
+        if (!evt || !evt.points || evt.points.length === 0) {
+          return;
+        }
+
+        var traceIndex = evt.points[0].curveNumber;
+        var id = evt.points[0].data.name;
+
+        resetTraces(el);
+
+        Plotly.restyle(el, {
+          opacity: activeOpacity,
+          'line.width': activeWidth
+        }, [traceIndex]);
+
+        Plotly.relayout(el, {
+          title: {text: 'Selected ID: ' + id}
+        });
+      });
+
+      el.on('plotly_doubleclick', function(evt) {
+        resetTraces(el);
+        Plotly.relayout(el, {
+          title: {text: 'Click a line to highlight its ID'}
+        });
+      });
+    }
+    "
+  )
+}
+
 #' Plot Mixing Distributions from an MCB Result
 #'
 #' @param mcb_res An object of class `"mcbary_result"`, such as the output of

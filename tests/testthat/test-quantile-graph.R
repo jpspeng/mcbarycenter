@@ -107,6 +107,76 @@ test_that("graph_quantiles still requires confidence interval columns when enabl
   )
 })
 
+test_that("graph_individual_quantiles returns a ggplot object", {
+  df <- data.frame(
+    id = c("a", "a", "b", "b"),
+    val = c(1, 3, 2, 4)
+  )
+
+  plot <- graph_individual_quantiles(
+    df,
+    id_col = "id",
+    val_col = "val",
+    alpha_grid = c(0, 0.5, 1),
+    interactive = FALSE
+  )
+
+  expect_s3_class(plot, "ggplot")
+  expect_equal(levels(plot$data$id), c("a", "b"))
+})
+
+test_that("graph_individual_quantiles validates required columns", {
+  df <- data.frame(
+    id = c("a", "a"),
+    value = c(1, 2)
+  )
+
+  expect_error(
+    graph_individual_quantiles(df, id_col = "missing", val_col = "value"),
+    "`id_col` must name a column in `df`."
+  )
+
+  expect_error(
+    graph_individual_quantiles(df, id_col = "id", val_col = "missing"),
+    "`val_col` must name a column in `df`."
+  )
+})
+
+test_that("graph_individual_quantiles requires interactive dependencies", {
+  df <- data.frame(
+    id = c("a", "a", "b", "b"),
+    val = c(1, 3, 2, 4)
+  )
+
+  skip_if(requireNamespace("plotly", quietly = TRUE))
+
+  expect_error(
+    graph_individual_quantiles(df, id_col = "id", val_col = "val"),
+    "`plotly` must be installed when `interactive = TRUE`."
+  )
+})
+
+test_that("graph_individual_quantiles returns a plotly htmlwidget", {
+  df <- data.frame(
+    id = c("a", "a", "b", "b"),
+    val = c(1, 3, 2, 4)
+  )
+
+  skip_if_not_installed("plotly")
+  skip_if_not_installed("htmlwidgets")
+
+  plot <- graph_individual_quantiles(
+    df,
+    id_col = "id",
+    val_col = "val",
+    alpha_grid = c(0, 0.5, 1),
+    interactive = TRUE
+  )
+
+  expect_s3_class(plot, "plotly")
+  expect_s3_class(plot, "htmlwidget")
+})
+
 test_that("graph_mixtures returns a combined ggplot", {
   fit <- structure(
     list(
