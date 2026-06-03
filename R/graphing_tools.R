@@ -233,7 +233,7 @@ graph_individual_quantiles <- function(
           group = id
         )
       ) +
-        ggplot2::geom_line(alpha = 0.2, linewidth = 0.4) +
+        ggplot2::geom_line(alpha = 0.5, linewidth = 0.4) +
         ggplot2::labs(
           x = "Quantile level",
           y = "Quantile value",
@@ -284,7 +284,7 @@ graph_individual_quantiles <- function(
         color = palette[[id]],
         width = 1
       ),
-      opacity = 0.2,
+      opacity = 0.5,
       showlegend = TRUE
     )
   }
@@ -301,7 +301,7 @@ graph_individual_quantiles <- function(
     p,
     "
     function(el, x) {
-      var fadedOpacity = 0.2;
+      var fadedOpacity = 0.5;
       var fadedWidth = 1;
       var activeOpacity = 1.0;
       var activeWidth = 3;

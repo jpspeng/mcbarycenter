@@ -21,6 +21,7 @@ knitr::opts_chunk$set(
 
 ```{r}
 library(mcbarycenter)
+library(dplyr)
 ```
 
 # Introduction
@@ -57,6 +58,18 @@ head(sparse_dist_data)
 Note that the data set must be in long format, with one column specifying the
 ids of the distributions and another column specifying the i.i.d. samples from
 those distributions.
+
+# Graphing individual empirical quantiles 
+
+```{r}
+first_10_df <- sparse_dist_data %>% 
+  filter(id %in% 1:10)
+
+graph_individual_quantiles(first_10_df, 
+                           id_col = "id", 
+                           val_col = "value")
+```
+
 
 # Estimating the Wasserstein barycenter quantile function
 
