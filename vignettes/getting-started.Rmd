@@ -61,6 +61,17 @@ those distributions.
 
 # Graphing individual empirical quantiles 
 
+To visualize the empirical quantile curve for each individual distribution, we
+can use `graph_individual_quantiles()`. This helper starts from a raw data frame
+in long format, computes empirical quantiles separately for each `id`, and then
+plots the resulting curves on a common quantile grid.
+
+When `interactive = TRUE` (the default), the function returns an interactive
+`plotly` widget. The curves are visible by default, and clicking a line
+highlights the selected individual. Double-clicking resets the plot. Because
+the graph can become crowded when there are many ids, the example below focuses
+on the first 10 individuals.
+
 ```{r}
 first_10_df <- sparse_dist_data %>% 
   filter(id %in% 1:10)
@@ -69,6 +80,9 @@ graph_individual_quantiles(first_10_df,
                            id_col = "id", 
                            val_col = "value")
 ```
+
+If a static figure is preferred, set `interactive = FALSE` to return a ggplot
+object instead.
 
 
 # Estimating the Wasserstein barycenter quantile function
@@ -153,7 +167,7 @@ Returns:
   the estimated mixing distributions in `mixtures`, the chosen estimation
   method in `method`, and the standardized input data in `data`.
 
-```{r}
+```{r, cache = T}
 mcb_res_grp0 <- mcbary(
   df = sample_grp0,
   id_col = "id",
