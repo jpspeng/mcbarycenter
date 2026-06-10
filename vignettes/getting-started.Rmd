@@ -35,7 +35,7 @@ series of binomial mixing distributions using a beta parametric specification,
 a spline parametric specification, or the NPMLE. It then combines those mixing
 distributions to estimate the Wasserstein barycenter.
 
-For more details, please see [cite paper].
+For more details, please see [Peng, Stijven et al. (arXiv, 2026)](https://arxiv.org/abs/2606.10096).
 
 The `mcbarycenter` package estimates the quantile function of the Wasserstein
 barycenter using either the empirical barycenter or the MCB estimator. In
