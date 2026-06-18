@@ -606,36 +606,6 @@
     }
   }
 
-  if (identical(mix_type, "cdf_grid")) {
-    breaks <- attr(mixture_df, "breaks", exact = TRUE)
-
-    if (!is.null(breaks) &&
-        is.numeric(breaks) &&
-        length(breaks) == (nrow(mixture_df) + 1L) &&
-        !anyNA(breaks) &&
-        isTRUE(all(diff(breaks) > 0))) {
-      g <- as.numeric(mixture_df$g)
-      g <- g / sum(g)
-
-      if (alpha <= breaks[1]) {
-        return(0)
-      }
-
-      if (alpha >= breaks[length(breaks)]) {
-        return(1)
-      }
-
-      k <- which(alpha <= breaks[-1])[1]
-      lo <- breaks[k]
-      hi <- breaks[k + 1]
-      prior <- if (k > 1L) sum(g[seq_len(k - 1L)]) else 0
-      frac <- (alpha - lo) / (hi - lo)
-      frac <- min(max(frac, 0), 1)
-
-      return(prior + g[k] * frac)
-    }
-  }
-
   if (!all(c("theta", "g") %in% names(mixture_df))) {
     stop(
       "Each mixture estimate must contain columns `theta` and `g`.",
