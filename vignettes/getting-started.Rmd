@@ -90,7 +90,7 @@ object instead.
 ## Empirical Wasserstein barycenter
 
 The `empbary()` function computes empirical quantiles for each subject and then
-averages those quantiles pointwise within each group. 
+averages those quantiles pointwise. 
 
 Arguments:
 
@@ -107,7 +107,7 @@ Returns:
 - An `empbary_result` object containing the estimated quantile curve in
   `res`, an estimated covariance matrix in `cov`, and the standardized input
   data in `data`.
-- This objected can be plotted with the function `graph_quantiles()`. 
+- This object can be plotted with the function `graph_quantiles()`. 
 
 Example:
 

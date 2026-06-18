@@ -6,7 +6,7 @@ mcbary(
   df,
   id_col = "id",
   val_col = "x",
-  method = c("spline", "npmle", "raw", "beta"),
+  method = c("spline", "npmle", "raw", "beta", "cdf_grid"),
   x_grid = NULL,
   cutpoints = NULL,
   bootstrap_samples = 100,

@@ -179,6 +179,56 @@ estimate_mixture_beta <- function(df,
   .estimate_mixture_beta_from_binomial(df_bin = df_bin, tau = tau)
 }
 
+#' Estimate a Grid-Based CDF Mixture Approximation
+#'
+#' @param df A data frame.
+#' @param id_col Column name identifying groups. Defaults to `"id"`.
+#' @param val_col Column name containing the observed values. Defaults to `"x"`.
+#' @param x_thresh Numeric threshold used to define successes.
+#' @param breaks Interval boundaries for the latent support on `[0, 1]`. When
+#'   `NULL`, the default interior grid is `0.01, 0.02, ..., 0.99`, with `0`
+#'   and `1` included as interval endpoints.
+#' @param maxit Maximum number of EM iterations.
+#' @param tol Convergence tolerance for the EM updates.
+#' @param lambda Small ridge penalty added to each interval mass update.
+#' @param weight_col Optional column name containing id-level weights.
+#'
+#' @return A standardized mixture data frame with columns `theta`, `g`, and
+#'   `cumul`. The interval breaks and optimization diagnostics are attached as
+#'   attributes.
+#' @export
+estimate_mixture_cdf_grid <- function(df,
+                                      id_col = "id",
+                                      val_col = "x",
+                                      x_thresh,
+                                      breaks = NULL,
+                                      maxit = 5000,
+                                      tol = 1e-10,
+                                      lambda = 1e-8,
+                                      weight_col = NULL) {
+  df <- .standardize_input_df(
+    df,
+    id_col = id_col,
+    val_col = val_col,
+    weight_col = weight_col
+  )
+  std_weight_col <- if (is.null(weight_col)) NULL else "weight"
+
+  df_bin <- .aggregate_binomial_data(
+    df = df,
+    x_thresh = x_thresh,
+    weight_col = std_weight_col
+  )
+
+  .estimate_mixture_cdf_grid_from_binomial(
+    df_bin = df_bin,
+    breaks = breaks,
+    maxit = maxit,
+    tol = tol,
+    lambda = lambda
+  )
+}
+
 #' Estimate Mixtures Across a Threshold Grid
 #'
 #' @param df A data frame.
@@ -194,7 +244,7 @@ estimate_mixture_beta <- function(df,
 estimate_all_mixtures <- function(df,
                                   id_col = "id",
                                   val_col = "x",
-                                  method = c("spline", "npmle", "raw", "beta"),
+                                  method = c("spline", "npmle", "raw", "beta", "cdf_grid"),
                                   x_grid = 1:10,
                                   weight_col = NULL,
                                   ...) {
@@ -465,8 +515,136 @@ estimate_all_mixtures <- function(df,
   out
 }
 
+.estimate_mixture_cdf_grid_from_binomial <- function(df_bin,
+                                                     breaks = NULL,
+                                                     maxit = 5000,
+                                                     tol = 1e-10,
+                                                     lambda = 1e-8,
+                                                     start = NULL) {
+  if (is.null(breaks)) {
+    breaks <- c(0, seq(0.01, 0.99, by = 0.01), 1)
+  }
+
+  breaks <- sort(unique(as.numeric(breaks)))
+
+  if (length(breaks) < 2L || anyNA(breaks)) {
+    stop("`breaks` must be a numeric vector with at least two finite values.", call. = FALSE)
+  }
+
+  if (any(breaks < 0 | breaks > 1)) {
+    stop("`breaks` must lie in [0, 1].", call. = FALSE)
+  }
+
+  if (!identical(min(breaks), 0) || !identical(max(breaks), 1)) {
+    stop("`breaks` must include both 0 and 1.", call. = FALSE)
+  }
+
+  if (!is.numeric(maxit) || length(maxit) != 1L || is.na(maxit) || maxit < 1) {
+    stop("`maxit` must be a single numeric value >= 1.", call. = FALSE)
+  }
+
+  if (!is.numeric(tol) || length(tol) != 1L || is.na(tol) || tol < 0) {
+    stop("`tol` must be a single non-negative numeric value.", call. = FALSE)
+  }
+
+  if (!is.numeric(lambda) || length(lambda) != 1L || is.na(lambda) || lambda < 0) {
+    stop("`lambda` must be a single non-negative numeric value.", call. = FALSE)
+  }
+
+  maxit <- as.integer(maxit)
+  n_intervals <- length(breaks) - 1L
+  widths <- diff(breaks)
+
+  if (any(widths <= 0)) {
+    stop("`breaks` must be strictly increasing after removing duplicates.", call. = FALSE)
+  }
+
+  has_weight <- "weight" %in% names(df_bin)
+
+  if (has_weight) {
+    obs <- dplyr::group_by(df_bin, n, s)
+    obs <- dplyr::summarise(
+      obs,
+      total = sum(.data$weight),
+      .groups = "drop"
+    )
+  } else {
+    obs <- dplyr::group_by(df_bin, n, s)
+    obs <- dplyr::summarise(obs, total = dplyr::n(), .groups = "drop")
+  }
+
+  y <- as.numeric(obs$total)
+
+  if (anyNA(y) || any(!is.finite(y)) || any(y < 0) || sum(y) <= 0) {
+    stop("Collapsed observation weights must be finite, non-negative, and sum to a positive value.", call. = FALSE)
+  }
+
+  A <- matrix(NA_real_, nrow = nrow(obs), ncol = n_intervals)
+
+  for (k in seq_len(n_intervals)) {
+    lo <- breaks[k]
+    hi <- breaks[k + 1]
+
+    A[, k] <-
+      (
+        stats::pbeta(hi, shape1 = obs$s + 1, shape2 = obs$n - obs$s + 1) -
+          stats::pbeta(lo, shape1 = obs$s + 1, shape2 = obs$n - obs$s + 1)
+      ) /
+      ((obs$n + 1) * widths[k])
+  }
+
+  if (is.null(start)) {
+    pi <- rep(1 / n_intervals, n_intervals)
+  } else {
+    pi <- as.numeric(start)
+
+    if (length(pi) != n_intervals || anyNA(pi) || any(!is.finite(pi)) || any(pi < 0) || sum(pi) <= 0) {
+      stop("`start` must be a non-negative numeric vector with one entry per interval and positive total mass.", call. = FALSE)
+    }
+
+    pi <- pi / sum(pi)
+  }
+
+  loglik_new <- -Inf
+
+  for (iter in seq_len(maxit)) {
+    denom <- as.vector(A %*% pi)
+    denom <- pmax(denom, .Machine$double.eps)
+
+    R <- sweep(A, 2, pi, "*")
+    R <- sweep(R, 1, denom, "/")
+
+    pi_new <- colSums(sweep(R, 1, y, "*")) + lambda
+    pi_new <- pi_new / sum(pi_new)
+
+    denom_new <- as.vector(A %*% pi_new)
+    denom_new <- pmax(denom_new, .Machine$double.eps)
+    loglik_new <- sum(y * log(denom_new))
+
+    if (max(abs(pi_new - pi)) < tol) {
+      pi <- pi_new
+      break
+    }
+
+    pi <- pi_new
+  }
+
+  out <- .standardize_mixture_df(theta = breaks[-1], g = pi)
+  attr(out, "mixture_type") <- "cdf_grid"
+  attr(out, "breaks") <- breaks
+  attr(out, "cdf_grid_fit") <- list(
+    obs = obs,
+    y = y,
+    A = A,
+    loglik = loglik_new,
+    iter = iter
+  )
+
+  out
+}
+
 .estimate_all_mixtures_from_precomputed <- function(precomputed,
-                                                    method = c("spline", "npmle", "raw", "beta"),
+                                                    method = c("spline", "npmle", "raw", "beta", "cdf_grid"),
                                                     ...) {
   method <- match.arg(method)
 
@@ -476,6 +654,7 @@ estimate_all_mixtures <- function(df,
   prev_beta_start <- NULL
   prev_npmle_start <- NULL
   prev_spline_start <- NULL
+  prev_cdf_grid_start <- NULL
   spline_cache <- NULL
   spline_disable_warm_start <- FALSE
 
@@ -532,7 +711,12 @@ estimate_all_mixtures <- function(df,
           start = prev_npmle_start,
           ...
         ),
-        raw = .estimate_mixture_raw_from_binomial(df_bin = df_bin)
+        raw = .estimate_mixture_raw_from_binomial(df_bin = df_bin),
+        cdf_grid = .estimate_mixture_cdf_grid_from_binomial(
+          df_bin = df_bin,
+          start = prev_cdf_grid_start,
+          ...
+        )
       )
     }
 
@@ -566,6 +750,12 @@ estimate_all_mixtures <- function(df,
       } else {
         prev_npmle_start <- NULL
       }
+    } else if (identical(method, "cdf_grid")) {
+      if (all(is.finite(mixture_est$g)) && length(mixture_est$g) > 0) {
+        prev_cdf_grid_start <- mixture_est$g
+      } else {
+        prev_cdf_grid_start <- NULL
+      }
     }
   }
 
@@ -573,7 +763,7 @@ estimate_all_mixtures <- function(df,
 }
 
 .estimate_all_mixtures_for_bootstrap <- function(precomputed,
-                                                 method = c("spline", "npmle", "raw", "beta"),
+                                                 method = c("spline", "npmle", "raw", "beta", "cdf_grid"),
                                                  ...) {
   method <- match.arg(method)
 
