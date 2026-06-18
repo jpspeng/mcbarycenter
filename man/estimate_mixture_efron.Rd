@@ -10,6 +10,7 @@ estimate_mixture_efron(
   tau = seq(from = 0.005, to = 0.995, by = 0.005),
   pDegree = 5,
   c0 = 0.001,
+  mass_at_endpoints = FALSE,
   weight_col = NULL
 )
 }
@@ -27,6 +28,9 @@ estimate_mixture_efron(
 \item{pDegree}{Degrees of freedom for the spline basis in \code{\link{deconv_fast}}.}
 
 \item{c0}{Penalty constant passed to \code{\link{deconv_fast}}.}
+
+\item{mass_at_endpoints}{Logical; if \code{TRUE}, augment the spline prior with
+separate point-mass components at \code{0} and \code{1}.}
 
 \item{weight_col}{Optional column name containing id-level weights.}
 }

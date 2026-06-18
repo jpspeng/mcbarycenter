@@ -7,6 +7,8 @@
 #' @param tau Support grid for the estimated mixture.
 #' @param pDegree Degrees of freedom for the spline basis in [deconv_fast()].
 #' @param c0 Penalty constant passed to [deconv_fast()].
+#' @param mass_at_endpoints Logical; if `TRUE`, augment the spline prior with
+#'   separate point-mass components at `0` and `1`.
 #' @param weight_col Optional column name containing id-level weights.
 #'
 #' @return A standardized mixture data frame with columns `theta`, `g`, and
@@ -19,6 +21,7 @@ estimate_mixture_efron <- function(df,
                                    tau = seq(from = 0.005, to = 0.995, by = 0.005),
                                    pDegree = 5,
                                    c0 = 0.001,
+                                   mass_at_endpoints = FALSE,
                                    weight_col = NULL) {
   tau <- sort(unique(as.numeric(tau)))
 
@@ -44,7 +47,8 @@ estimate_mixture_efron <- function(df,
     df_bin = df_bin,
     tau = tau,
     pDegree = pDegree,
-    c0 = c0
+    c0 = c0,
+    mass_at_endpoints = mass_at_endpoints
   )
 }
 
@@ -225,41 +229,41 @@ estimate_all_mixtures <- function(df,
                                                   tau = seq(from = 0.005, to = 0.995, by = 0.005),
                                                   pDegree = 5,
                                                   c0 = 0.001,
+                                                  mass_at_endpoints = FALSE,
                                                   aStart = 1.0,
                                                   deconv_cache = NULL,
                                                   compute_stats = TRUE) {
-  x_input <- dplyr::select(df_bin, n, s)
+  tau <- .prepare_spline_tau(
+    tau = tau,
+    mass_at_endpoints = mass_at_endpoints
+  )
 
   if (is.null(deconv_cache)) {
-    result <- deconv_fast(
-      tau = tau,
-      X = x_input,
-      family = "Binomial",
-      pDegree = pDegree,
-      c0 = c0,
-      aStart = aStart,
-      compute_stats = compute_stats,
-      obs_weights = if ("weight" %in% names(df_bin)) df_bin$weight else NULL
-    )
-  } else {
-    logP <- .build_binomial_logP_matrix(
+    deconv_cache <- .make_spline_deconv_cache(
       n = df_bin$n,
-      s = df_bin$s,
-      tau = deconv_cache$tau
-    )
-
-    result <- deconv_fast(
-      tau = deconv_cache$tau,
-      family = "Binomial",
-      y = 1,
-      Q = deconv_cache$Q,
-      P = logP,
-      c0 = c0,
-      aStart = aStart,
-      compute_stats = compute_stats,
-      obs_weights = if ("weight" %in% names(df_bin)) df_bin$weight else NULL
+      tau = tau,
+      pDegree = pDegree,
+      mass_at_endpoints = mass_at_endpoints
     )
   }
+
+  logP <- .build_binomial_logP_matrix(
+    n = df_bin$n,
+    s = df_bin$s,
+    tau = deconv_cache$tau
+  )
+
+  result <- deconv_fast(
+    tau = deconv_cache$tau,
+    family = "Binomial",
+    y = 1,
+    Q = deconv_cache$Q,
+    P = logP,
+    c0 = c0,
+    aStart = aStart,
+    compute_stats = compute_stats,
+    obs_weights = if ("weight" %in% names(df_bin)) df_bin$weight else NULL
+  )
 
   stats_df <- data.frame(result$stats)
   out <- .standardize_mixture_df(theta = stats_df$theta, g = stats_df$g)
@@ -484,6 +488,11 @@ estimate_all_mixtures <- function(df,
     tau <- if ("tau" %in% names(args)) args$tau else seq(from = 0.005, to = 0.995, by = 0.005)
     pDegree <- if ("pDegree" %in% names(args)) args$pDegree else 5
     spline_c0 <- if ("c0" %in% names(args)) args$c0 else 0.001
+    mass_at_endpoints <- if ("mass_at_endpoints" %in% names(args)) {
+      args$mass_at_endpoints
+    } else {
+      FALSE
+    }
     spline_disable_warm_start <- is.numeric(spline_c0) &&
       length(spline_c0) == 1L &&
       !is.na(spline_c0) &&
@@ -491,7 +500,8 @@ estimate_all_mixtures <- function(df,
     spline_cache <- .make_spline_deconv_cache(
       n = precomputed$n,
       tau = tau,
-      pDegree = pDegree
+      pDegree = pDegree,
+      mass_at_endpoints = mass_at_endpoints
     )
   }
 
@@ -645,21 +655,72 @@ estimate_all_mixtures <- function(df,
   start
 }
 
-.make_spline_deconv_cache <- function(n,
-                                      tau = seq(from = 0.005, to = 0.995, by = 0.005),
-                                      pDegree = 5,
-                                      scale = TRUE) {
+.prepare_spline_tau <- function(tau,
+                                mass_at_endpoints = FALSE) {
   tau <- sort(unique(as.numeric(tau)))
-  Q <- splines::ns(tau, pDegree)
+
+  if (length(tau) == 0 || anyNA(tau) || any(tau < 0 | tau > 1)) {
+    stop("`tau` must be numeric and lie in [0, 1].", call. = FALSE)
+  }
+
+  if (!is.logical(mass_at_endpoints) ||
+      length(mass_at_endpoints) != 1L ||
+      is.na(mass_at_endpoints)) {
+    stop("`mass_at_endpoints` must be a single TRUE/FALSE value.", call. = FALSE)
+  }
+
+  if (isTRUE(mass_at_endpoints)) {
+    tau <- sort(unique(c(0, tau, 1)))
+  }
+
+  tau
+}
+
+.make_binomial_spline_basis <- function(tau,
+                                        pDegree = 5,
+                                        scale = TRUE,
+                                        mass_at_endpoints = FALSE) {
+  tau <- .prepare_spline_tau(
+    tau = tau,
+    mass_at_endpoints = mass_at_endpoints
+  )
+
+  Q1 <- splines::ns(tau, pDegree)
 
   if (scale) {
-    Q <- scale(Q, center = TRUE, scale = FALSE)
-    Q <- sweep(Q, 2, sqrt(colSums(Q * Q)), "/")
+    Q1 <- scale(Q1, center = TRUE, scale = FALSE)
+    Q1 <- sweep(Q1, 2, sqrt(colSums(Q1 * Q1)), "/")
+  }
+
+  if (isTRUE(mass_at_endpoints)) {
+    I0 <- as.numeric(abs(tau - 0) < 1e-10)
+    I1 <- as.numeric(abs(tau - 1) < 1e-10)
+    Q <- cbind(I0, I1, Q1)
+  } else {
+    Q <- Q1
   }
 
   list(
-    n = as.numeric(n),
     tau = tau,
     Q = as.matrix(Q)
+  )
+}
+
+.make_spline_deconv_cache <- function(n,
+                                      tau = seq(from = 0.005, to = 0.995, by = 0.005),
+                                      pDegree = 5,
+                                      scale = TRUE,
+                                      mass_at_endpoints = FALSE) {
+  basis <- .make_binomial_spline_basis(
+    tau = tau,
+    pDegree = pDegree,
+    scale = scale,
+    mass_at_endpoints = mass_at_endpoints
+  )
+
+  list(
+    n = as.numeric(n),
+    tau = basis$tau,
+    Q = basis$Q
   )
 }

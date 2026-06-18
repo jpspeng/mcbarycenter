@@ -55,6 +55,28 @@ test_that("estimate_all_mixtures passes weights to spline method", {
   expect_named(fit[["0.5"]], c("theta", "g", "cumul"))
 })
 
+test_that("estimate_mixture_efron can add explicit endpoint masses", {
+  df <- data.frame(
+    id = c("a", "a", "b", "b", "c", "c"),
+    x = c(0, 1, 0, 1, 1, 1)
+  )
+
+  fit <- estimate_mixture_efron(
+    df = df,
+    id_col = "id",
+    val_col = "x",
+    x_thresh = 0.5,
+    tau = seq(0.2, 0.8, by = 0.2),
+    pDegree = 3,
+    c0 = 0.1,
+    mass_at_endpoints = TRUE
+  )
+
+  expect_true(0 %in% fit$theta)
+  expect_true(1 %in% fit$theta)
+  expect_equal(sum(fit$g), 1)
+})
+
 test_that("mixture estimators accept non-default weight column names", {
   df <- data.frame(
     grp = c("a", "a", "b", "b", "c", "c"),
