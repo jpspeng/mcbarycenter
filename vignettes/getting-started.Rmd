@@ -70,7 +70,9 @@ When `interactive = TRUE` (the default), the function returns an interactive
 `plotly` widget. The curves are visible by default, and clicking a line
 highlights the selected individual. Double-clicking resets the plot. Because
 the graph can become crowded when there are many ids, the example below focuses
-on the first 10 individuals.
+on the first 10 individuals. In the bundled sample data, ids `1`, `2`, and `3`
+are intentionally shaped to illustrate a homogeneous three-sample curve, a
+right-tailed curve, and a high-variability curve.
 
 ```{r}
 first_10_df <- sparse_dist_data %>% 
@@ -83,6 +85,11 @@ graph_individual_quantiles(first_10_df,
 
 If a static figure is preferred, set `interactive = FALSE` to return a ggplot
 object instead.
+
+For larger datasets, you can also cap the plotted curve resolution with
+`max_points`. This keeps an approximately evenly spaced subset of the quantile
+grid before computing the displayed curves, which can make the interactive
+`plotly` widget load much faster.
 
 
 # Estimating the Wasserstein barycenter quantile function

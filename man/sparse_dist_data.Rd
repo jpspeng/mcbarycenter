@@ -22,6 +22,9 @@ parameters. Group \code{0} is generated from id-specific normal distributions
 centered near \code{N(0, 1)}. Group \code{1} is generated from id-specific two-component
 mixtures with a bulk component near \code{N(0, 1)} and a small upper-tail
 component near \code{N(2, 0.25)}. Each group contains 200 subject ids, and each
-id has between 3 and 7 observations.
+id has between 3 and 7 observations. The first three ids are hand-tuned
+examples used in the plotting vignette: id \code{1} is a homogeneous
+three-observation sample, id \code{2} has a right tail, and id \code{3} has high
+within-id variability.
 }
 \keyword{datasets}

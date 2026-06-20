@@ -125,6 +125,28 @@ test_that("graph_individual_quantiles returns a ggplot object", {
   expect_equal(levels(plot$data$id), c("a", "b"))
 })
 
+test_that("graph_individual_quantiles can thin the quantile grid for plotting", {
+  df <- data.frame(
+    id = rep(c("a", "b"), each = 20),
+    val = seq_len(40)
+  )
+
+  plot <- graph_individual_quantiles(
+    df,
+    id_col = "id",
+    val_col = "val",
+    alpha_grid = seq(0, 1, length.out = 11),
+    max_points = 5,
+    interactive = FALSE
+  )
+
+  plotted_grid <- sort(unique(plot$data$quantile))
+
+  expect_length(plotted_grid, 5)
+  expect_equal(plotted_grid[c(1, 5)], c(0, 1))
+  expect_true(is.unsorted(plotted_grid, strictly = TRUE) == FALSE)
+})
+
 test_that("graph_individual_quantiles validates required columns", {
   df <- data.frame(
     id = c("a", "a"),
@@ -139,6 +161,16 @@ test_that("graph_individual_quantiles validates required columns", {
   expect_error(
     graph_individual_quantiles(df, id_col = "id", val_col = "missing"),
     "`val_col` must name a column in `df`."
+  )
+
+  expect_error(
+    graph_individual_quantiles(
+      transform(df, val = value),
+      id_col = "id",
+      val_col = "val",
+      max_points = 0
+    ),
+    "`max_points` must be NULL or a single positive whole number."
   )
 })
 
@@ -169,12 +201,14 @@ test_that("graph_individual_quantiles returns a plotly htmlwidget", {
     df,
     id_col = "id",
     val_col = "val",
-    alpha_grid = c(0, 0.5, 1),
+    alpha_grid = seq(0, 1, length.out = 9),
+    max_points = 4,
     interactive = TRUE
   )
 
   expect_s3_class(plot, "plotly")
   expect_s3_class(plot, "htmlwidget")
+  expect_true(all(vapply(plot$x$data, function(trace) length(trace$x), integer(1)) == 4L))
 })
 
 test_that("graph_mixtures returns a combined ggplot", {

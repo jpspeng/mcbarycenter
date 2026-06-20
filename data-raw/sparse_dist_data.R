@@ -82,4 +82,32 @@ sparse_dist_data <- do.call(
   })
 )
 
+# Hand-tune the first three ids so the plotting examples have stable,
+# easy-to-interpret shapes.
+example_ids <- data.frame(
+  group = c(
+    rep(0, 3),
+    rep(0, 5),
+    rep(0, 6)
+  ),
+  id = c(
+    rep(1, 3),
+    rep(2, 5),
+    rep(3, 6)
+  ),
+  value = c(
+    rep(0.2, 3),
+    -0.35, -0.12, 0.08, 0.21, 3.25,
+    -3.1, -1.8, -0.5, 0.6, 1.9, 3.4
+  )
+)
+
+sparse_dist_data <- rbind(
+  subset(sparse_dist_data, !(id %in% 1:3)),
+  example_ids
+)
+
+sparse_dist_data <- sparse_dist_data[order(sparse_dist_data$id), ]
+row.names(sparse_dist_data) <- NULL
+
 save(sparse_dist_data, file = "data/sparse_dist_data.rda")

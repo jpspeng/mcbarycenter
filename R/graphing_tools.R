@@ -134,6 +134,11 @@ graph_quantiles <- function(..., show_ci = TRUE) {
 #' @param val_col A string giving the column name containing numeric values.
 #' @param alpha_grid A numeric vector of probabilities passed to [stats::quantile()].
 #'   Defaults to `seq(0.01, 0.99, 0.01)`.
+#' @param max_points Optional maximum number of quantile-grid points to plot per
+#'   individual curve. If supplied and `alpha_grid` is longer than this value,
+#'   the function keeps an approximately evenly spaced subset of the grid before
+#'   computing quantiles. This can substantially speed up large interactive
+#'   plots.
 #' @param quantile_type The `type` argument passed to [stats::quantile()].
 #'   Defaults to `1`.
 #' @param interactive Logical; if `TRUE`, return an interactive plotly object.
@@ -146,6 +151,7 @@ graph_individual_quantiles <- function(
     id_col,
     val_col,
     alpha_grid = seq(0.01, 0.99, 0.01),
+    max_points = NULL,
     quantile_type = 1,
     interactive = TRUE
 ) {
@@ -184,6 +190,18 @@ graph_individual_quantiles <- function(
     stop("`alpha_grid` values must lie between 0 and 1.", call. = FALSE)
   }
 
+  if (!is.null(max_points) &&
+      (!is.numeric(max_points) ||
+       length(max_points) != 1L ||
+       is.na(max_points) ||
+       max_points < 1 ||
+       max_points != as.integer(max_points))) {
+    stop(
+      "`max_points` must be NULL or a single positive whole number.",
+      call. = FALSE
+    )
+  }
+
   if (!is.numeric(quantile_type) || length(quantile_type) != 1L || is.na(quantile_type)) {
     stop("`quantile_type` must be a single numeric value.", call. = FALSE)
   }
@@ -202,16 +220,22 @@ graph_individual_quantiles <- function(
     )
   }
 
+  plot_alpha_grid <- alpha_grid
+  if (!is.null(max_points) && length(alpha_grid) > max_points) {
+    keep_idx <- unique(round(seq.int(1L, length(alpha_grid), length.out = max_points)))
+    plot_alpha_grid <- alpha_grid[keep_idx]
+  }
+
   quantile_df <- do.call(
     rbind,
     lapply(names(split_vals), function(id) {
       values <- split_vals[[id]]
       data.frame(
         id = id,
-        quantile = alpha_grid,
+        quantile = plot_alpha_grid,
         estimate = stats::quantile(
           values[!is.na(values)],
-          probs = alpha_grid,
+          probs = plot_alpha_grid,
           type = quantile_type,
           names = FALSE
         ),
@@ -270,7 +294,7 @@ graph_individual_quantiles <- function(
       data = d,
       x = ~quantile,
       y = ~estimate,
-      type = "scatter",
+      type = "scattergl",
       mode = "lines",
       name = id,
       customdata = rep(id, nrow(d)),
