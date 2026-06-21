@@ -205,10 +205,12 @@ test_that("graph_individual_quantiles returns a plotly htmlwidget", {
     max_points = 4,
     interactive = TRUE
   )
+  built_plot <- plotly::plotly_build(plot)
 
   expect_s3_class(plot, "plotly")
   expect_s3_class(plot, "htmlwidget")
-  expect_true(all(vapply(plot$x$data, function(trace) length(trace$x), integer(1)) == 4L))
+  expect_true(all(vapply(built_plot$x$data, function(trace) length(trace$x), integer(1)) == 4L))
+  expect_equal(vapply(built_plot$x$data, function(trace) trace$name, character(1)), c("a (n = 2)", "b (n = 2)"))
 })
 
 test_that("graph_mixtures returns a combined ggplot", {

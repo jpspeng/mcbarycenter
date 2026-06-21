@@ -226,6 +226,14 @@ graph_individual_quantiles <- function(
     plot_alpha_grid <- alpha_grid[keep_idx]
   }
 
+  id_counts <- vapply(
+    split_vals,
+    function(values) sum(!is.na(values)),
+    FUN.VALUE = integer(1)
+  )
+  id_labels <- sprintf("%s (n = %d)", names(id_counts), id_counts)
+  names(id_labels) <- names(id_counts)
+
   quantile_df <- do.call(
     rbind,
     lapply(names(split_vals), function(id) {
@@ -288,6 +296,7 @@ graph_individual_quantiles <- function(
 
   for (id in ids) {
     d <- quantile_df[quantile_df$id == id, , drop = FALSE]
+    trace_label <- id_labels[[id]]
 
     p <- plotly::add_trace(
       p,
@@ -296,10 +305,10 @@ graph_individual_quantiles <- function(
       y = ~estimate,
       type = "scattergl",
       mode = "lines",
-      name = id,
+      name = trace_label,
       customdata = rep(id, nrow(d)),
       hovertemplate = paste0(
-        "ID: ", id,
+        "ID: ", trace_label,
         "<br>Quantile: %{x:.2f}",
         "<br>Value: %{y:.3f}",
         "<extra></extra>"

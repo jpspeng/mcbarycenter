@@ -496,9 +496,20 @@ mcbary <- function(df,
   )
   
   if (use_isotonic_output) {
-    res$estimate <- stats::isoreg(x = res$quantile, y = res$estimate)$yf
-    res$ci_lo <- stats::isoreg(x = res$quantile, y = res$ci_lo)$yf
-    res$ci_hi <- stats::isoreg(x = res$quantile, y = res$ci_hi)$yf
+    isotonicize_output <- function(x, y) {
+      keep <- !is.na(y)
+      if (sum(keep) <= 1L) {
+        return(y)
+      }
+
+      out <- y
+      out[keep] <- stats::isoreg(x = x[keep], y = y[keep])$yf
+      out
+    }
+
+    res$estimate <- isotonicize_output(res$quantile, res$estimate)
+    res$ci_lo <- isotonicize_output(res$quantile, res$ci_lo)
+    res$ci_hi <- isotonicize_output(res$quantile, res$ci_hi)
   }
 
   if (any(diff(res$estimate) < 0, na.rm = TRUE)) {
