@@ -1,7 +1,7 @@
 set.seed(123)
 
 n_ids_per_group <- 200
-group_levels <- c(0, 1)
+group_levels <- c(1, 2)
 
 id_params <- do.call(
   rbind,
@@ -16,8 +16,8 @@ id_params <- do.call(
 
 id_params$id <- seq_len(nrow(id_params))
 
-group0_idx <- id_params$group == 0
 group1_idx <- id_params$group == 1
+group2_idx <- id_params$group == 2
 
 id_params$mean_bulk <- NA_real_
 id_params$sd_bulk <- NA_real_
@@ -25,19 +25,19 @@ id_params$tail_prob <- NA_real_
 id_params$tail_mean <- NA_real_
 id_params$tail_sd <- NA_real_
 
-# Group 0 remains centered near N(0, 1), but each id has its own
+# Group 1 remains centered near N(0, 1), but each id has its own
 # location/scale perturbation.
-id_params$mean_bulk[group0_idx] <- stats::rnorm(sum(group0_idx), mean = 0, sd = 0.35)
-id_params$sd_bulk[group0_idx] <- exp(stats::rnorm(sum(group0_idx), mean = 0, sd = 0.15))
-
-# Group 1 keeps the same overall bimodal structure, with id-specific
-# variation in the bulk component and the tail component.
 id_params$mean_bulk[group1_idx] <- stats::rnorm(sum(group1_idx), mean = 0, sd = 0.35)
 id_params$sd_bulk[group1_idx] <- exp(stats::rnorm(sum(group1_idx), mean = 0, sd = 0.15))
-id_params$tail_prob[group1_idx] <- stats::rbeta(sum(group1_idx), shape1 = 2, shape2 = 38)
-id_params$tail_mean[group1_idx] <- stats::rnorm(sum(group1_idx), mean = 2, sd = 0.2)
-id_params$tail_sd[group1_idx] <- exp(stats::rnorm(
-  sum(group1_idx),
+
+# Group 2 keeps the same overall bimodal structure, with id-specific
+# variation in the bulk component and the tail component.
+id_params$mean_bulk[group2_idx] <- stats::rnorm(sum(group2_idx), mean = 0, sd = 0.35)
+id_params$sd_bulk[group2_idx] <- exp(stats::rnorm(sum(group2_idx), mean = 0, sd = 0.15))
+id_params$tail_prob[group2_idx] <- stats::rbeta(sum(group2_idx), shape1 = 2, shape2 = 38)
+id_params$tail_mean[group2_idx] <- stats::rnorm(sum(group2_idx), mean = 2, sd = 0.2)
+id_params$tail_sd[group2_idx] <- exp(stats::rnorm(
+  sum(group2_idx),
   mean = log(0.25),
   sd = 0.12
 ))
@@ -49,7 +49,7 @@ simulate_group_values <- function(group_value,
                                   tail_prob = NA_real_,
                                   tail_mean = NA_real_,
                                   tail_sd = NA_real_) {
-  if (group_value == 0) {
+  if (group_value == 1) {
     return(stats::rnorm(n_obs, mean = mean_bulk, sd = sd_bulk))
   }
 
@@ -86,9 +86,9 @@ sparse_dist_data <- do.call(
 # easy-to-interpret shapes.
 example_ids <- data.frame(
   group = c(
-    rep(0, 3),
-    rep(0, 5),
-    rep(0, 6)
+    rep(1, 3),
+    rep(1, 5),
+    rep(1, 6)
   ),
   id = c(
     rep(1, 3),

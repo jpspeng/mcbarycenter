@@ -7,7 +7,7 @@
 \format{
 A data frame with 1,986 rows and 3 variables:
 \describe{
-\item{group}{Group indicator taking values \code{0} or \code{1}.}
+\item{group}{Group indicator taking values \code{1} or \code{2}.}
 \item{id}{Unique subject identifier.}
 \item{value}{Observed sample from the subject-specific distribution.}
 }
@@ -18,8 +18,8 @@ data(sparse_dist_data)
 \description{
 A simulated example data set with two groups of sparse subject-level
 distributions. Within each group, ids have their own underlying distribution
-parameters. Group \code{0} is generated from id-specific normal distributions
-centered near \code{N(0, 1)}. Group \code{1} is generated from id-specific two-component
+parameters. Group \code{1} is generated from id-specific normal distributions
+centered near \code{N(0, 1)}. Group \code{2} is generated from id-specific two-component
 mixtures with a bulk component near \code{N(0, 1)} and a small upper-tail
 component near \code{N(2, 0.25)}. Each group contains 200 subject ids, and each
 id has between 3 and 7 observations. The first three ids are hand-tuned

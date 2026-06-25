@@ -119,14 +119,8 @@ Returns:
 Example:
 
 ```{r}
-sample_grp0 <- subset(sparse_dist_data, group == 0)
 sample_grp1 <- subset(sparse_dist_data, group == 1)
-
-emp_res_grp0 <- empbary(
-  df = sample_grp0,
-  id_col = "id",
-  val_col = "value"
-)
+sample_grp2 <- subset(sparse_dist_data, group == 2)
 
 emp_res_grp1 <- empbary(
   df = sample_grp1,
@@ -134,8 +128,14 @@ emp_res_grp1 <- empbary(
   val_col = "value"
 )
 
-head(emp_res_grp0$res)
+emp_res_grp2 <- empbary(
+  df = sample_grp2,
+  id_col = "id",
+  val_col = "value"
+)
+
 head(emp_res_grp1$res)
+head(emp_res_grp2$res)
 ```
 
 
@@ -175,18 +175,6 @@ Returns:
   method in `method`, and the standardized input data in `data`.
 
 ```{r, cache = T}
-mcb_res_grp0 <- mcbary(
-  df = sample_grp0,
-  id_col = "id",
-  val_col = "value",
-  method = "beta",
-  cutpoints = 100,
-  use_midpoint = TRUE,
-  estimate_endpoints = TRUE,
-  bootstrap_samples = 20,
-  progress = FALSE
-)
-
 mcb_res_grp1 <- mcbary(
   df = sample_grp1,
   id_col = "id",
@@ -197,10 +185,21 @@ mcb_res_grp1 <- mcbary(
   estimate_endpoints = TRUE,
   bootstrap_samples = 20,
   progress = FALSE
-)
+) 
 
-head(mcb_res_grp0$res)
+mcb_res_grp2 <- mcbary(
+  df = sample_grp2,
+  id_col = "id",
+  val_col = "value",
+  method = "beta",
+  cutpoints = 100,
+  use_midpoint = TRUE,
+  estimate_endpoints = TRUE,
+  bootstrap_samples = 20,
+  progress = FALSE
+)
 head(mcb_res_grp1$res)
+head(mcb_res_grp2$res)
 ```
 
 # Graphing tools
@@ -209,19 +208,19 @@ The package includes helpers for plotting both the estimated barycenter
 quantiles and the intermediate mixing distributions.
 
 The graph below displays the empirical barycenters and the MCB estimators 
-for groups 0 and 1. 
+for groups 1 and 2. 
 
 ```{r}
 graph_quantiles(
-  emp_grp0 = emp_res_grp0,
   emp_grp1 = emp_res_grp1,
-  mcb_grp0 = mcb_res_grp0,
-  mcb_grp1 = mcb_res_grp1
+  emp_grp2 = emp_res_grp2,
+  mcb_grp1 = mcb_res_grp1,
+  mcb_grp2 = mcb_res_grp2
 )
 ```
 
 ```{r}
-graph_mixtures(mcb_res_grp0)
+graph_mixtures(mcb_res_grp1)
 ```
 
 # Comparing Wasserstein barycenters
@@ -230,11 +229,11 @@ To compare barycenters between groups of observations, we can use the `quantile_
 function, which calculates the quantile differences between the two groups.
 
 For example, we can compute the difference between the estimated MCB quantile
-functions for groups 0 and 1, and then graph the resulting quantile
+functions for groups 1 and 2, and then graph the resulting quantile
 difference curve.
 
 ```{r}
-quantile_diff_res <- quantile_diff(mcb_res_grp0, mcb_res_grp1)
+quantile_diff_res <- quantile_diff(mcb_res_grp1, mcb_res_grp2)
 
 head(quantile_diff_res)
 ```
@@ -248,7 +247,7 @@ same quantile grid and then apply `equalbary_test()`. Here we compare the two
 groups in `sparse_dist_data`. 
 
 ```{r}
-comparison <- equalbary_test(mcb_res_grp0, mcb_res_grp1, B = 1000, seed = 1)
+comparison <- equalbary_test(mcb_res_grp1, mcb_res_grp2, B = 1000, seed = 1)
 
 comparison$sup_norm$pval
 comparison$int_sq_norm$pval
