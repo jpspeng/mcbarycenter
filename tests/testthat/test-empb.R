@@ -83,6 +83,68 @@ test_that("empbary computes a weighted barycenter when weight_col is supplied", 
   expect_equal(result$data, data.frame(id = df$id, val = df$value, weight = df$weight))
 })
 
+test_that("empbary can presmooth grouped samples before averaging", {
+  df <- data.frame(
+    id = c("a", "a", "a", "b", "b", "b"),
+    value = c(1, 1, 1, 3, 3, 3)
+  )
+
+  result <- empbary(
+    df = df,
+    id_col = "id",
+    val_col = "value",
+    alpha_grid = c(0.25, 0.5, 0.75),
+    presmooth = TRUE
+  )
+
+  expect_s3_class(result, "empbary_result")
+  expect_equal(result$res$quantile, c(0.25, 0.5, 0.75))
+  expect_true(all(is.finite(result$res$estimate)))
+  expect_true(all(diff(result$res$estimate) > 0))
+  expect_equal(result$res$estimate[[2]], 2, tolerance = 1e-4)
+  expect_true(all(is.finite(result$res$se)))
+})
+
+test_that("empbary presmoothing supports weighted barycenters", {
+  df <- data.frame(
+    id = c("a", "a", "a", "b", "b", "b"),
+    value = c(1, 1, 1, 3, 3, 3),
+    weight = c(1, 1, 1, 3, 3, 3)
+  )
+
+  result <- empbary(
+    df = df,
+    id_col = "id",
+    val_col = "value",
+    weight_col = "weight",
+    alpha_grid = c(0.5),
+    presmooth = TRUE
+  )
+
+  expect_equal(result$res$estimate[[1]], 2.5, tolerance = 1e-4)
+})
+
+test_that("empbary handles a single quantile level", {
+  df <- data.frame(
+    id = c("a", "a", "b", "b"),
+    value = c(1, 3, 5, 7),
+    weight = c(1, 1, 3, 3)
+  )
+
+  result <- empbary(
+    df = df,
+    id_col = "id",
+    val_col = "value",
+    weight_col = "weight",
+    alpha_grid = 0.5,
+    quantile_type = 3
+  )
+
+  expect_equal(result$res$quantile, 0.5)
+  expect_equal(result$res$estimate[[1]], 4)
+  expect_equal(result$res$se[[1]], sqrt(5))
+})
+
 test_that("empbary_result has a custom print method", {
   result <- structure(
     list(
@@ -112,5 +174,22 @@ test_that("empbary requires weights to be homogeneous within id", {
       weight_col = "weight"
     ),
     "`weight_col` must be non-missing and homogeneous within each `id`."
+  )
+})
+
+test_that("empbary validates the presmooth flag", {
+  df <- data.frame(
+    id = c("a", "a"),
+    value = c(1, 3)
+  )
+
+  expect_error(
+    empbary(
+      df = df,
+      id_col = "id",
+      val_col = "value",
+      presmooth = NA
+    ),
+    "`presmooth` must be a single TRUE/FALSE value."
   )
 })

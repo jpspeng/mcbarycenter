@@ -107,7 +107,10 @@ Arguments:
 - `weight_col`: an optional column containing group weights; if omitted, the
   empirical barycenter is unweighted.
 - `alpha_grid`: the grid of quantile levels to estimate.
-- `quantile_type`: the `type` argument passed to `stats::quantile()`.
+- `presmooth`: if `TRUE`, compute a Gaussian-KDE-based quantile estimate for
+  each subject on a shared grid before averaging.
+- `quantile_type`: the `type` argument passed to `stats::quantile()`. This is
+  ignored when `presmooth = TRUE`.
 
 Returns: 
 
@@ -183,7 +186,7 @@ mcb_res_grp1 <- mcbary(
   cutpoints = 100,
   use_midpoint = TRUE,
   estimate_endpoints = TRUE,
-  bootstrap_samples = 20,
+  bootstrap_samples = 50,
   progress = FALSE
 ) 
 
@@ -195,7 +198,7 @@ mcb_res_grp2 <- mcbary(
   cutpoints = 100,
   use_midpoint = TRUE,
   estimate_endpoints = TRUE,
-  bootstrap_samples = 20,
+  bootstrap_samples = 50,
   progress = FALSE
 )
 head(mcb_res_grp1$res)
@@ -233,7 +236,7 @@ functions for groups 1 and 2, and then graph the resulting quantile
 difference curve.
 
 ```{r}
-quantile_diff_res <- quantile_diff(mcb_res_grp1, mcb_res_grp2)
+quantile_diff_res <- quantile_diff(mcb_res_grp2, mcb_res_grp1)
 
 head(quantile_diff_res)
 ```

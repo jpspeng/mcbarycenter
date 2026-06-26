@@ -10,6 +10,7 @@ empbary(
   val_col,
   weight_col = NULL,
   alpha_grid = seq(0.01, 0.99, 0.01),
+  presmooth = FALSE,
   quantile_type = 1
 )
 }
@@ -26,8 +27,12 @@ Defaults to \code{NULL}, in which case the empirical barycenter is unweighted.}
 \item{alpha_grid}{A numeric vector of probabilities passed to \code{\link[stats:quantile]{stats::quantile()}}.
 Defaults to \code{seq(0.01, 0.99, 0.01)}.}
 
+\item{presmooth}{Logical; if \code{TRUE}, estimate a Gaussian KDE for each group
+on a shared grid, convert that KDE to a CDF, and invert the CDF at
+\code{alpha_grid} before averaging. Defaults to \code{FALSE}.}
+
 \item{quantile_type}{The \code{type} argument passed to \code{\link[stats:quantile]{stats::quantile()}}.
-Defaults to \code{1}.}
+Defaults to \code{1}. Ignored when \code{presmooth = TRUE}.}
 }
 \value{
 An S3 object of class \code{"empbary_result"} with:
