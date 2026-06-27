@@ -6,30 +6,26 @@
   c(0, cumsum(diff(x) * (head(y, -1L) + tail(y, -1L)) / 2))
 }
 
-.presmooth_bandwidth <- function(values) {
-  n <- length(values)
-  scale_candidates <- c(stats::sd(values), stats::IQR(values) / 1.34)
-  scale_candidates <- scale_candidates[is.finite(scale_candidates) & scale_candidates > 0]
+.default_density_bandwidth <- function(values) {
+  bandwidth <- stats::bw.nrd0(values)
 
-  if (length(scale_candidates) == 0L) {
-    value_range <- diff(range(values))
-    if (is.finite(value_range) && value_range > 0) {
-      scale_estimate <- value_range / 4
-    } else {
-      scale_estimate <- max(1, abs(values[[1]])) * 0.1
-    }
-  } else {
-    scale_estimate <- min(scale_candidates)
+  if (is.finite(bandwidth) && bandwidth > 0) {
+    return(bandwidth)
   }
 
-  max(2 * 0.9 * scale_estimate * n^(-1 / 5), sqrt(.Machine$double.eps))
+  value_range <- diff(range(values))
+  if (is.finite(value_range) && value_range > 0) {
+    return(value_range / 4)
+  }
+
+  max(max(1, abs(values[[1]])) * 0.1, sqrt(.Machine$double.eps))
 }
 
 .presmooth_grid <- function(split_vals, alpha_grid) {
   bandwidths <- vapply(
     split_vals,
     FUN.VALUE = numeric(1),
-    FUN = .presmooth_bandwidth
+    FUN = .default_density_bandwidth
   )
   pooled_values <- unlist(split_vals, use.names = FALSE)
   support_range <- range(pooled_values)
@@ -54,10 +50,8 @@
 }
 
 .presmooth_quantiles <- function(values, alpha_grid, grid_spec) {
-  bandwidth <- .presmooth_bandwidth(values)
   density_fit <- stats::density(
     values,
-    bw = bandwidth,
     kernel = "gaussian",
     from = grid_spec$from,
     to = grid_spec$to,
