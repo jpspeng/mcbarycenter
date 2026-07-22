@@ -585,7 +585,9 @@
     fit = fit,
     alpha = alpha,
     beta = beta,
-    attempts = attempts
+    attempts = attempts,
+    lower = lower,
+    upper = upper
   )
 }
 
@@ -596,6 +598,16 @@
 
   mix_type <- attr(mixture_df, "mixture_type", exact = TRUE)
   if (identical(mix_type, "beta")) {
+    beta_fit <- attr(mixture_df, "beta_fit", exact = TRUE)
+    if (!is.null(beta_fit) && isTRUE(beta_fit$degenerate)) {
+      if (identical(beta_fit$degeneracy, "all_failure")) {
+        return(as.numeric(alpha > 0))
+      }
+      if (identical(beta_fit$degeneracy, "all_success")) {
+        return(as.numeric(alpha >= 1))
+      }
+    }
+
     beta_mle <- attr(mixture_df, "beta_mle", exact = TRUE)
     if (!is.null(beta_mle) &&
         is.finite(beta_mle$alpha) &&

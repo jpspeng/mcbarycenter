@@ -173,6 +173,7 @@ test_that("mcbary requires cutpoints or x_grid", {
 })
 
 test_that("mcbary uses cluster bootstrap resampling by default", {
+  set.seed(7)
   input <- data.frame(
     id = c(1, 1, 1, 2, 2, 2, 3, 3, 3),
     value = c(1, 2, 3, 2, 3, 4, 1, 4, 5)
@@ -202,6 +203,7 @@ test_that("mcbary uses cluster bootstrap resampling by default", {
 })
 
 test_that("mcbary accepts non-default weight column names", {
+  set.seed(7)
   input <- data.frame(
     grp = c(1, 1, 2, 2, 3, 3),
     value = c(1, 2, 2, 3, 3, 4),

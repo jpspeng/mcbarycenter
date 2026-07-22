@@ -1,6 +1,6 @@
 \name{mcbary}
 \alias{mcbary}
-\title{Monte Carlo Bootstrap for Quantile Estimation}
+\title{Marginal-Constructed Barycenter Estimation and Inference}
 \usage{
 mcbary(
   df,
@@ -18,6 +18,7 @@ mcbary(
   weight_col = NULL,
   progress = TRUE,
   ci_level = 0.95,
+  inference = c("bootstrap", "analytic", "none"),
   ...
 )
 }
@@ -60,16 +61,27 @@ alpha-quantile distribution.}
 
 \item{ci_level}{Confidence level.}
 
+\item{inference}{Inference method. \code{"bootstrap"} (the default) performs
+the unit-level cluster bootstrap, \code{"analytic"} uses Beta-specific
+unit-level influence functions, and \code{"none"} skips uncertainty
+estimation. Analytic inference requires \code{method = "beta"}, no weights,
+interior \code{alpha_grid} values, \code{use_isotonic_dist = TRUE}, and
+\code{use_isotonic_output = FALSE}.}
+
 \item{...}{Additional arguments passed to \code{\link{estimate_all_mixtures}}.}
 }
 \value{
 A list with components \code{res}, \code{cov}, \code{mixtures},
-\code{method}, and \code{data}. \code{res} is a data frame with columns
+\code{method}, \code{data}, \code{influence}, and \code{inference}. \code{res}
+is a data frame with columns
 \code{quantile}, \code{estimate}, \code{estimate_bs}, \code{se},
 \code{ci_lo}, \code{ci_hi}, \code{pct_ci_lo}, and \code{pct_ci_hi}.
-\code{data} contains the original \code{id_col} and \code{val_col}
-columns from the input.
+\code{data} contains the original \code{id_col} and \code{val_col} columns from
+the input. \code{cov} is on the barycenter estimator scale. For analytic
+inference, \code{influence} contains integrated unit-level influence functions;
+otherwise it is \code{NULL}.
 }
 \description{
-Estimate quantile curves with Monte Carlo bootstrap uncertainty.
+Estimate marginal-constructed barycenter quantile curves with bootstrap,
+Beta-specific analytic, or no uncertainty estimation.
 }

@@ -152,7 +152,8 @@ estimate_mixture_raw <- function(df,
 #'
 #' @return A standardized mixture data frame with columns `theta`, `g`, and
 #'   `cumul`. The fitted beta parameters are attached in the `beta_mle`
-#'   attribute when available.
+#'   attribute when available. Additional convergence and boundary diagnostics
+#'   are attached in the `beta_fit` attribute.
 #' @export
 estimate_mixture_beta <- function(df,
                                   id_col = "id",
@@ -443,6 +444,15 @@ estimate_all_mixtures <- function(df,
     out <- .standardize_mixture_df(theta = tau, g = g)
     attr(out, "mixture_type") <- "beta"
     attr(out, "beta_mle") <- list(alpha = NA_real_, beta = NA_real_)
+    attr(out, "beta_fit") <- list(
+      shape1 = NA_real_,
+      shape2 = NA_real_,
+      convergence = NA_integer_,
+      objective = NA_real_,
+      at_boundary = FALSE,
+      degenerate = TRUE,
+      degeneracy = if (all_success) "all_success" else "all_failure"
+    )
     return(out)
   }
 
@@ -464,6 +474,22 @@ estimate_all_mixtures <- function(df,
   attr(out, "beta_mle") <- list(
     alpha = fit_info$alpha,
     beta = fit_info$beta
+  )
+  at_boundary <-
+    fit_info$alpha <= fit_info$lower[1] * (1 + 1e-3) ||
+    fit_info$alpha >= fit_info$upper[1] * (1 - 1e-3) ||
+    fit_info$beta <= fit_info$lower[2] * (1 + 1e-3) ||
+    fit_info$beta >= fit_info$upper[2] * (1 - 1e-3)
+  attr(out, "beta_fit") <- list(
+    shape1 = fit_info$alpha,
+    shape2 = fit_info$beta,
+    convergence = fit_info$fit$convergence,
+    objective = fit_info$fit$value,
+    at_boundary = at_boundary,
+    degenerate = FALSE,
+    degeneracy = NA_character_,
+    lower = fit_info$lower,
+    upper = fit_info$upper
   )
 
   out

@@ -2,7 +2,7 @@
 % Please edit documentation in R/mcbary.R
 \name{mcbary}
 \alias{mcbary}
-\title{Monte Carlo Bootstrap for Quantile Estimation}
+\title{Marginal-Constructed Barycenter Estimation and Inference}
 \usage{
 mcbary(
   df,
@@ -20,6 +20,7 @@ mcbary(
   weight_col = NULL,
   progress = TRUE,
   ci_level = 0.95,
+  inference = c("bootstrap", "analytic", "none"),
   ...
 )
 }
@@ -40,7 +41,7 @@ supplied if \code{cutpoints} is \code{NULL}.}
 
 \item{bootstrap_samples}{Number of bootstrap resamples. When set to 1, only
 the quantile estimate is reported and uncertainty columns are returned as
-\code{NA}.}
+\code{NA}. This argument is only validated and used when \code{inference = "bootstrap"}.}
 
 \item{alpha_grid}{Grid of target quantile levels.}
 
@@ -62,15 +63,28 @@ alpha-quantile distribution.}
 
 \item{ci_level}{Confidence level.}
 
+\item{inference}{Inference method. \code{"bootstrap"} (the default) performs the
+existing unit-level cluster bootstrap, \code{"analytic"} uses Beta-specific
+unit-level influence functions, and \code{"none"} skips uncertainty estimation.
+Analytic inference currently requires \code{method = "beta"}, no weights,
+interior \code{alpha_grid} values, \code{use_isotonic_dist = TRUE}, and
+\code{use_isotonic_output = FALSE}.}
+
 \item{...}{Additional arguments passed to \code{\link[=estimate_all_mixtures]{estimate_all_mixtures()}}.}
 }
 \value{
 An S3 object of class \code{"mcbary_result"} with components \code{res},
-\code{cov}, \code{mixtures}, \code{method}, and \code{data}. \code{res} is a data frame with
+\code{cov}, \code{mixtures}, \code{method}, \code{data}, \code{influence}, and \code{inference}. \code{res} is
+a data frame with
 columns \code{quantile}, \code{estimate}, \code{estimate_bs}, \code{se}, \code{ci_lo}, \code{ci_hi},
 \code{pct_ci_lo}, and \code{pct_ci_hi}. \code{data} contains the original \code{id_col} and
-\code{val_col} columns from the input.
+\code{val_col} columns from the input. \code{cov} is the covariance matrix of the
+barycenter quantile estimator (not the covariance of its square-root-n
+limit). For analytic inference, \code{influence} is the matrix of integrated
+unit-level influence functions, with units in rows and quantile levels in
+columns; otherwise it is \code{NULL}. \code{inference} records the selected inference
+method and diagnostics.
 }
 \description{
-Monte Carlo Bootstrap for Quantile Estimation
+Marginal-Constructed Barycenter Estimation and Inference
 }

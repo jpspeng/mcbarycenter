@@ -201,7 +201,7 @@ est_all_quantiles <- function(mixture_res,
   )
 }
 
-#' Monte Carlo Bootstrap for Quantile Estimation
+#' Marginal-Constructed Barycenter Estimation and Inference
 #'
 #' @param df A data frame.
 #' @param id_col Column name identifying groups. Defaults to `"id"`.
@@ -213,7 +213,8 @@ est_all_quantiles <- function(mixture_res,
 #'   `cutpoints` or `x_grid` must be supplied.
 #' @param bootstrap_samples Number of bootstrap resamples. When set to 1, only
 #'   the quantile estimate is reported and uncertainty columns are returned as
-#'   `NA`.
+#'   `NA`. This argument is only validated and used when `inference =
+#'   "bootstrap"`.
 #' @param alpha_grid Grid of target quantile levels.
 #' @param use_midpoint Logical; whether to use interval midpoints between
 #'   adjacent thresholds.
@@ -226,13 +227,25 @@ est_all_quantiles <- function(mixture_res,
 #' @param weight_col Optional column name containing id-level weights.
 #' @param progress Logical; whether to display a bootstrap progress bar.
 #' @param ci_level Confidence level.
+#' @param inference Inference method. `"bootstrap"` (the default) performs the
+#'   existing unit-level cluster bootstrap, `"analytic"` uses Beta-specific
+#'   unit-level influence functions, and `"none"` skips uncertainty estimation.
+#'   Analytic inference currently requires `method = "beta"`, no weights,
+#'   interior `alpha_grid` values, `use_isotonic_dist = TRUE`, and
+#'   `use_isotonic_output = FALSE`.
 #' @param ... Additional arguments passed to [estimate_all_mixtures()].
 #'
 #' @return An S3 object of class `"mcbary_result"` with components `res`,
-#'   `cov`, `mixtures`, `method`, and `data`. `res` is a data frame with
+#'   `cov`, `mixtures`, `method`, `data`, `influence`, and `inference`. `res` is
+#'   a data frame with
 #'   columns `quantile`, `estimate`, `estimate_bs`, `se`, `ci_lo`, `ci_hi`,
 #'   `pct_ci_lo`, and `pct_ci_hi`. `data` contains the original `id_col` and
-#'   `val_col` columns from the input.
+#'   `val_col` columns from the input. `cov` is the covariance matrix of the
+#'   barycenter quantile estimator (not the covariance of its square-root-n
+#'   limit). For analytic inference, `influence` is the matrix of integrated
+#'   unit-level influence functions, with units in rows and quantile levels in
+#'   columns; otherwise it is `NULL`. `inference` records the selected inference
+#'   method and diagnostics.
 #' @export
 mcbary <- function(df,
                 id_col = "id",
@@ -249,8 +262,10 @@ mcbary <- function(df,
                 weight_col = NULL,
                 progress = TRUE,
                 ci_level = 0.95,
+                inference = c("bootstrap", "analytic", "none"),
                 ...) {
   method <- match.arg(method)
+  inference <- match.arg(inference)
   data_out <- data.frame(
     id = df[[id_col]],
     val = df[[val_col]]
@@ -263,13 +278,18 @@ mcbary <- function(df,
     weight_col = weight_col
   )
   std_weight_col <- if (is.null(weight_col)) NULL else "weight"
-  
-  if (!is.numeric(bootstrap_samples) || length(bootstrap_samples) != 1 ||
-      is.na(bootstrap_samples) || bootstrap_samples < 1) {
-    stop("`bootstrap_samples` must be a single integer >= 1.", call. = FALSE)
+
+  if (identical(inference, "bootstrap")) {
+    if (!is.numeric(bootstrap_samples) || length(bootstrap_samples) != 1 ||
+        is.na(bootstrap_samples) || bootstrap_samples < 1) {
+      stop("`bootstrap_samples` must be a single integer >= 1.", call. = FALSE)
+    }
+    bootstrap_samples <- as.integer(bootstrap_samples)
+
+    if (!is.logical(progress) || length(progress) != 1L || is.na(progress)) {
+      stop("`progress` must be a single TRUE/FALSE value.", call. = FALSE)
+    }
   }
-  
-  bootstrap_samples <- as.integer(bootstrap_samples)
   
   if (!is.numeric(ci_level) || length(ci_level) != 1 || is.na(ci_level) ||
       ci_level <= 0 || ci_level >= 1) {
@@ -296,7 +316,38 @@ mcbary <- function(df,
       call. = FALSE
     )
   }
-  
+
+  if (!is.numeric(alpha_grid) || length(alpha_grid) == 0L ||
+      anyNA(alpha_grid) || any(!is.finite(alpha_grid)) ||
+      any(alpha_grid < 0 | alpha_grid > 1)) {
+    stop("`alpha_grid` must be a non-empty finite numeric vector in [0, 1].",
+         call. = FALSE)
+  }
+  alpha_grid <- sort(unique(as.numeric(alpha_grid)))
+
+  if (identical(inference, "analytic")) {
+    if (!identical(method, "beta")) {
+      stop("`inference = \"analytic\"` currently requires `method = \"beta\"`.",
+           call. = FALSE)
+    }
+    if (!is.null(weight_col)) {
+      stop("Beta analytic inference currently requires `weight_col = NULL`.",
+           call. = FALSE)
+    }
+    if (any(alpha_grid <= 0 | alpha_grid >= 1)) {
+      stop("Beta analytic inference requires all `alpha_grid` values to lie strictly inside (0, 1).",
+           call. = FALSE)
+    }
+    if (!isTRUE(use_isotonic_dist)) {
+      stop("Beta analytic inference requires `use_isotonic_dist = TRUE`.",
+           call. = FALSE)
+    }
+    if (isTRUE(use_isotonic_output)) {
+      stop("Beta analytic inference requires `use_isotonic_output = FALSE`.",
+           call. = FALSE)
+    }
+  }
+
   if (is.null(cutpoints) && is.null(x_grid)) {
     stop(
       "Either `cutpoints` or `x_grid` must be supplied.",
@@ -319,31 +370,30 @@ mcbary <- function(df,
     x_grid_overall <- x_grid
   }
 
-  use_precomputed_grid <- is.null(cutpoints)
+  precomputed_grid <- .precompute_binomial_grid(
+    df = df,
+    x_grid = x_grid_overall,
+    weight_col = std_weight_col
+  )
 
-  if (use_precomputed_grid) {
-    precomputed_grid <- .precompute_binomial_grid(
-      df = df,
-      x_grid = x_grid_overall,
-      weight_col = std_weight_col
-    )
-
-    overall_mixture_res <- .estimate_all_mixtures_from_precomputed(
-      precomputed = precomputed_grid,
-      method = method,
-      ...
-    )
-  } else {
-    overall_mixture_res <- estimate_all_mixtures(
-      df = df,
-      id_col = "id",
-      val_col = "x",
-      method = method,
-      x_grid = x_grid_overall,
-      weight_col = std_weight_col,
-      ...
-    )
+  if (identical(inference, "analytic")) {
+    if (length(precomputed_grid$n) < 2L) {
+      stop("Beta analytic inference requires at least two observational units.",
+           call. = FALSE)
+    }
+    if (!any(precomputed_grid$n > 1L)) {
+      stop(
+        "Beta analytic inference requires at least one unit with more than one observation; the two Beta shape parameters are not identifiable when all unit sizes equal one.",
+        call. = FALSE
+      )
+    }
   }
+
+  overall_mixture_res <- .estimate_all_mixtures_from_precomputed(
+    precomputed = precomputed_grid,
+    method = method,
+    ...
+  )
   
   overall_quantile_res <- est_all_quantiles(
     mixture_res = overall_mixture_res,
@@ -353,94 +403,146 @@ mcbary <- function(df,
     use_isotonic_dist = use_isotonic_dist
   )
   
-  if (use_precomputed_grid) {
-    n_ids <- length(precomputed_grid$n)
-  } else {
-    ids <- unique(df$id)
-    by_id <- split(df, df$id)
-  }
-  
-  res_matrix <- matrix(
-    NA_real_,
-    nrow = bootstrap_samples,
-    ncol = length(alpha_grid)
-  )
-  
-  if (!is.logical(progress) || length(progress) != 1L || is.na(progress)) {
-    stop("`progress` must be a single TRUE/FALSE value.", call. = FALSE)
-  }
-  
-  if (progress) {
-    pb <- utils::txtProgressBar(
-      min = 0,
-      max = bootstrap_samples,
-      style = 3,
-      file = stderr()
-    )
-    on.exit(close(pb), add = TRUE)
-  }
-  
-  for (i in seq_len(bootstrap_samples)) {
-    if (use_precomputed_grid) {
-      sampled_idx <- sample.int(n_ids, size = n_ids, replace = TRUE)
-      boot_precomputed <- .resample_precomputed_binomial_grid(
-        precomputed = precomputed_grid,
-        sampled_idx = sampled_idx
-      )
+  n_alpha <- length(alpha_grid)
+  estimate_bs <- rep(NA_real_, n_alpha)
+  se <- rep(NA_real_, n_alpha)
+  cov_mat <- matrix(NA_real_, nrow = n_alpha, ncol = n_alpha)
+  pct_ci_lo <- rep(NA_real_, n_alpha)
+  pct_ci_hi <- rep(NA_real_, n_alpha)
+  ci_lo <- rep(NA_real_, n_alpha)
+  ci_hi <- rep(NA_real_, n_alpha)
+  influence <- NULL
+  inference_details <- list(method = inference, diagnostics = NULL)
 
-      boot_mixture_res <- .estimate_all_mixtures_for_bootstrap(
-        precomputed = boot_precomputed,
-        method = method,
-        ...
-      )
+  if (identical(inference, "bootstrap")) {
+    fixed_bootstrap_grid <- is.null(cutpoints)
+    if (fixed_bootstrap_grid) {
+      n_ids <- length(precomputed_grid$n)
     } else {
-      sampled_ids <- sample(ids, size = length(ids), replace = TRUE)
-      picked <- by_id[as.character(sampled_ids)]
+      ids <- unique(df$id)
+      by_id <- split(df, df$id)
+    }
 
-      picked <- setNames(picked, seq_along(picked))
+    res_matrix <- matrix(
+      NA_real_,
+      nrow = bootstrap_samples,
+      ncol = n_alpha
+    )
 
-      df_boot <- dplyr::bind_rows(picked, .id = "boot_id")
-      df_boot <- dplyr::mutate(df_boot, id = .data$boot_id)
-      df_boot <- dplyr::select(df_boot, -boot_id)
+    if (progress) {
+      pb <- utils::txtProgressBar(
+        min = 0,
+        max = bootstrap_samples,
+        style = 3,
+        file = stderr()
+      )
+      on.exit(close(pb), add = TRUE)
+    }
 
-      if (!is.null(cutpoints)) {
+    for (i in seq_len(bootstrap_samples)) {
+      if (fixed_bootstrap_grid) {
+        sampled_idx <- sample.int(n_ids, size = n_ids, replace = TRUE)
+        boot_precomputed <- .resample_precomputed_binomial_grid(
+          precomputed = precomputed_grid,
+          sampled_idx = sampled_idx
+        )
+
+        boot_mixture_res <- .estimate_all_mixtures_for_bootstrap(
+          precomputed = boot_precomputed,
+          method = method,
+          ...
+        )
+      } else {
+        sampled_ids <- sample(ids, size = length(ids), replace = TRUE)
+        picked <- setNames(by_id[as.character(sampled_ids)], seq_along(sampled_ids))
+        df_boot <- dplyr::bind_rows(picked, .id = "boot_id")
+        df_boot <- dplyr::mutate(df_boot, id = .data$boot_id)
+        df_boot <- dplyr::select(df_boot, -boot_id)
         x_grid_boot <- seq(
           min(df_boot$x),
           max(df_boot$x),
           length.out = cutpoints
         )
-      } else {
-        x_grid_boot <- x_grid
+
+        boot_mixture_res <- estimate_all_mixtures(
+          df = df_boot,
+          id_col = "id",
+          val_col = "x",
+          method = method,
+          x_grid = x_grid_boot,
+          weight_col = std_weight_col,
+          ...
+        )
       }
 
-      boot_mixture_res <- estimate_all_mixtures(
-        df = df_boot,
-        id_col = "id",
-        val_col = "x",
-        method = method,
-        x_grid = x_grid_boot,
-        weight_col = std_weight_col,
-        ...
+      boot_quantile_res <- est_all_quantiles(
+        mixture_res = boot_mixture_res,
+        alpha_grid = alpha_grid,
+        use_midpoint = use_midpoint,
+        estimate_first_last = estimate_endpoints,
+        use_isotonic_dist = use_isotonic_dist
       )
+      res_matrix[i, ] <- boot_quantile_res$estimate
+
+      if (progress) {
+        utils::setTxtProgressBar(pb, i)
+        flush.console()
+      }
     }
-    
-    boot_quantile_res <- est_all_quantiles(
-      mixture_res = boot_mixture_res,
-      alpha_grid = alpha_grid,
-      use_midpoint = use_midpoint,
-      estimate_first_last = estimate_endpoints,
-      use_isotonic_dist = use_isotonic_dist
+
+    inference_details$diagnostics <- list(
+      bootstrap_samples = bootstrap_samples
     )
-    
-    res_matrix[i, ] <- boot_quantile_res$estimate
-    
-    if (progress) {
-      utils::setTxtProgressBar(pb, i)
-      flush.console()
+
+    if (bootstrap_samples > 1L) {
+      estimate_bs <- colMeans(res_matrix, na.rm = TRUE)
+      se <- apply(res_matrix, 2, stats::sd, na.rm = TRUE)
+      cov_mat <- stats::cov(res_matrix, use = "pairwise.complete.obs")
+
+      alpha_ci <- 1 - ci_level
+      lo_prob <- alpha_ci / 2
+      hi_prob <- 1 - alpha_ci / 2
+      pct_ci_lo <- apply(
+        res_matrix,
+        2,
+        stats::quantile,
+        probs = lo_prob,
+        na.rm = TRUE,
+        names = FALSE
+      )
+      pct_ci_hi <- apply(
+        res_matrix,
+        2,
+        stats::quantile,
+        probs = hi_prob,
+        na.rm = TRUE,
+        names = FALSE
+      )
+      z <- stats::qnorm(1 - alpha_ci / 2)
+      ci_lo <- overall_quantile_res$estimate - z * se
+      ci_hi <- overall_quantile_res$estimate + z * se
     }
+  } else if (identical(inference, "analytic")) {
+    analytic <- .beta_mcb_analytic_inference(
+      precomputed = precomputed_grid,
+      mixtures = overall_mixture_res,
+      alpha_grid = alpha_grid,
+      estimate = overall_quantile_res$estimate,
+      use_midpoint = use_midpoint,
+      estimate_endpoints = estimate_endpoints,
+      use_isotonic_dist = use_isotonic_dist,
+      ci_level = ci_level
+    )
+    se <- analytic$se
+    ci_lo <- analytic$ci_lo
+    ci_hi <- analytic$ci_hi
+    cov_mat <- analytic$cov
+    influence <- analytic$influence
+    inference_details$diagnostics <- analytic$diagnostics
+    inference_details$grid_jacobian <- analytic$grid_jacobian
   }
-  
-  if (bootstrap_samples == 1L) {
+
+  if (identical(inference, "bootstrap") && bootstrap_samples == 1L) {
     estimate_bs <- rep(NA_real_, length(alpha_grid))
     se <- rep(NA_real_, length(alpha_grid))
     cov_mat <- matrix(NA_real_, nrow = length(alpha_grid), ncol = length(alpha_grid))
@@ -448,42 +550,10 @@ mcbary <- function(df,
     pct_ci_hi <- rep(NA_real_, length(alpha_grid))
     ci_lo <- rep(NA_real_, length(alpha_grid))
     ci_hi <- rep(NA_real_, length(alpha_grid))
-  } else {
-    # Bootstrap summaries
-    estimate_bs <- colMeans(res_matrix, na.rm = TRUE)
-    se <- apply(res_matrix, 2, stats::sd, na.rm = TRUE)
-    cov_mat <- stats::cov(res_matrix, use = "pairwise.complete.obs")
-    
-    # CI setup
-    alpha_ci <- 1 - ci_level
-    lo_prob <- alpha_ci / 2
-    hi_prob <- 1 - alpha_ci / 2
-    
-    # Percentile CIs
-    pct_ci_lo <- apply(
-      res_matrix,
-      2,
-      stats::quantile,
-      probs = lo_prob,
-      na.rm = TRUE,
-      names = FALSE
-    )
-    
-    pct_ci_hi <- apply(
-      res_matrix,
-      2,
-      stats::quantile,
-      probs = hi_prob,
-      na.rm = TRUE,
-      names = FALSE
-    )
-    
-    # Wald CIs
-    z <- stats::qnorm(1 - alpha_ci / 2)
-    ci_lo <- overall_quantile_res$estimate - z * se
-    ci_hi <- overall_quantile_res$estimate + z * se
   }
-  
+
+  dimnames(cov_mat) <- list(as.character(alpha_grid), as.character(alpha_grid))
+
   res <- data.frame(
     quantile = alpha_grid,
     estimate = overall_quantile_res$estimate,
@@ -523,9 +593,11 @@ mcbary <- function(df,
     list(
     res = res,
     cov = cov_mat,
-    mixtures = overall_mixture_res,
-    method = method,
-    data = data_out
+      mixtures = overall_mixture_res,
+      method = method,
+      data = data_out,
+      influence = influence,
+      inference = inference_details
     ),
     class = "mcbary_result"
   )

@@ -27,7 +27,8 @@ estimate_mixture_beta(
 \value{
 A standardized mixture data frame with columns \code{theta}, \code{g}, and
 \code{cumul}. The fitted beta parameters are attached in the \code{beta_mle}
-attribute when available.
+attribute when available. Additional convergence and boundary diagnostics are
+attached in the \code{beta_fit} attribute.
 }
 \description{
 Estimate a discretized beta-mixture approximation on the supplied support grid.
