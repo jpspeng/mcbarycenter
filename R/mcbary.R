@@ -245,7 +245,9 @@ est_all_quantiles <- function(mixture_res,
 #'   limit). For analytic inference, `influence` is the matrix of integrated
 #'   unit-level influence functions, with units in rows and quantile levels in
 #'   columns; otherwise it is `NULL`. `inference` records the selected inference
-#'   method and diagnostics.
+#'   method and diagnostics. Beta analytic diagnostics report both observed and
+#'   fitted expected Fisher information; the expected information is used for
+#'   influence-function inversion.
 #' @export
 mcbary <- function(df,
                 id_col = "id",
@@ -539,6 +541,7 @@ mcbary <- function(df,
     cov_mat <- analytic$cov
     influence <- analytic$influence
     inference_details$diagnostics <- analytic$diagnostics
+    inference_details$information <- analytic$information
     inference_details$grid_jacobian <- analytic$grid_jacobian
   }
 

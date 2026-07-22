@@ -65,6 +65,104 @@
   )
 }
 
+.betabinomial_expected_information <- function(n, shape1, shape2) {
+  n <- as.numeric(n)
+  if (length(n) == 0L || anyNA(n) || any(!is.finite(n)) || any(n < 1) ||
+      any(n != floor(n))) {
+    stop("`n` must contain positive finite integer cluster sizes.",
+         call. = FALSE)
+  }
+  if (!is.numeric(shape1) || length(shape1) != 1L || is.na(shape1) ||
+      !is.finite(shape1) || shape1 <= 0 ||
+      !is.numeric(shape2) || length(shape2) != 1L || is.na(shape2) ||
+      !is.finite(shape2) || shape2 <= 0) {
+    stop("`shape1` and `shape2` must be finite positive scalars.", call. = FALSE)
+  }
+
+  size_counts <- table(n)
+  cluster_sizes <- as.integer(names(size_counts))
+  size_weights <- as.numeric(size_counts) / length(n)
+  conditional <- vector("list", length(cluster_sizes))
+  information <- matrix(
+    0,
+    nrow = 2L,
+    ncol = 2L,
+    dimnames = list(c("shape1", "shape2"), c("shape1", "shape2"))
+  )
+  expected_score <- c(shape1 = 0, shape2 = 0)
+
+  for (j in seq_along(cluster_sizes)) {
+    m <- cluster_sizes[j]
+    y <- 0:m
+    log_probability <- lchoose(m, y) +
+      lbeta(y + shape1, m - y + shape2) -
+      lbeta(shape1, shape2)
+    max_log_probability <- max(log_probability)
+    scaled_probability <- exp(log_probability - max_log_probability)
+    log_normalizer <- max_log_probability + log(sum(scaled_probability))
+    probability <- exp(log_probability - log_normalizer)
+
+    score <- .betabinomial_score_hessian(
+      n = rep(m, length(y)),
+      s = y,
+      shape1 = shape1,
+      shape2 = shape2
+    )$score
+    conditional_score <- colSums(score * probability)
+    conditional_information <- crossprod(score * sqrt(probability))
+    conditional_information <-
+      (conditional_information + t(conditional_information)) / 2
+    conditional_eigenvalues <- eigen(
+      conditional_information,
+      symmetric = TRUE,
+      only.values = TRUE
+    )$values
+    conditional_minimum_eigenvalue <- min(conditional_eigenvalues)
+    conditional_condition_number <- if (conditional_minimum_eigenvalue > 0) {
+      max(conditional_eigenvalues) / conditional_minimum_eigenvalue
+    } else {
+      Inf
+    }
+
+    information <- information + size_weights[j] * conditional_information
+    expected_score <- expected_score + size_weights[j] * conditional_score
+    conditional[[j]] <- list(
+      cluster_size = m,
+      frequency = as.integer(size_counts[j]),
+      weight = size_weights[j],
+      information = conditional_information,
+      minimum_eigenvalue = conditional_minimum_eigenvalue,
+      condition_number = conditional_condition_number,
+      expected_score = conditional_score,
+      expected_score_norm = sqrt(sum(conditional_score^2)),
+      log_probability_normalizer = log_normalizer
+    )
+  }
+
+  information <- (information + t(information)) / 2
+  information_eigenvalues <- if (all(is.finite(information))) {
+    eigen(information, symmetric = TRUE, only.values = TRUE)$values
+  } else {
+    rep(NA_real_, 2L)
+  }
+  minimum_eigenvalue <- min(information_eigenvalues)
+  condition_number <- if (all(is.finite(information_eigenvalues)) &&
+      minimum_eigenvalue > 0) {
+    max(information_eigenvalues) / minimum_eigenvalue
+  } else {
+    Inf
+  }
+
+  list(
+    information = information,
+    minimum_eigenvalue = minimum_eigenvalue,
+    condition_number = condition_number,
+    expected_score = expected_score,
+    expected_score_norm = sqrt(sum(expected_score^2)),
+    conditional = conditional
+  )
+}
+
 .beta_cdf_shape_gradient <- function(
     alpha,
     shape1,
@@ -277,6 +375,7 @@
 
   influence <- matrix(0, nrow = n_units, ncol = n_alpha)
   diagnostics <- vector("list", n_thresholds)
+  information_diagnostics <- vector("list", n_thresholds)
 
   for (k in seq_len(n_thresholds)) {
     s_k <- precomputed$s[, k]
@@ -290,13 +389,22 @@
       if_g_k <- matrix(0, nrow = n_alpha, ncol = n_units)
       shape1 <- NA_real_
       shape2 <- NA_real_
-      minimum_eigenvalue <- NA_real_
-      condition_number <- NA_real_
+      observed_minimum_eigenvalue <- NA_real_
+      observed_condition_number <- NA_real_
+      expected_minimum_eigenvalue <- NA_real_
+      expected_condition_number <- NA_real_
+      expected_score_norm <- 0
       score_norm <- 0
       convergence <- if (is.null(beta_fit)) NA_integer_ else beta_fit$convergence
       objective <- if (is.null(beta_fit)) NA_real_ else beta_fit$objective
       at_boundary <- FALSE
       degeneracy <- if (all_success) "all_success" else "all_failure"
+      information_diagnostics[[k]] <- list(
+        observed = matrix(NA_real_, 2L, 2L),
+        expected = matrix(NA_real_, 2L, 2L),
+        expected_by_cluster_size = NULL,
+        used = "fixed_degenerate"
+      )
     } else {
       shape1 <- if (!is.null(beta_fit)) beta_fit$shape1 else beta_mle$alpha
       shape2 <- if (!is.null(beta_fit)) beta_fit$shape2 else beta_mle$beta
@@ -317,23 +425,33 @@
         shape1 = shape1,
         shape2 = shape2
       )
-      information <- score_info$information
-      if (any(!is.finite(information))) {
+      observed_information <- score_info$information
+      expected_info <- .betabinomial_expected_information(
+        n = precomputed$n,
+        shape1 = shape1,
+        shape2 = shape2
+      )
+      expected_information <- expected_info$information
+      if (any(!is.finite(expected_information))) {
         stop(
           sprintf(
-            "Beta information matrix at threshold x = %s is nonfinite.",
+            "Expected Beta Fisher information at threshold x = %s is nonfinite.",
             format(x_grid[k])
           ),
           call. = FALSE
         )
       }
-      eig_values <- eigen(information, symmetric = TRUE, only.values = TRUE)$values
+      eig_values <- eigen(
+        expected_information,
+        symmetric = TRUE,
+        only.values = TRUE
+      )$values
       singular_tol <- max(abs(eig_values)) * .Machine$double.eps * 100
       if (any(!is.finite(eig_values)) ||
           min(eig_values) <= singular_tol) {
         stop(
           sprintf(
-            "Beta information matrix at threshold x = %s is nonfinite or numerically singular (minimum eigenvalue = %s).",
+            "Expected Beta Fisher information at threshold x = %s is nonfinite or numerically singular (minimum eigenvalue = %s).",
             format(x_grid[k]),
             format(min(eig_values))
           ),
@@ -346,14 +464,24 @@
         shape1 = shape1,
         shape2 = shape2
       )
-      if_g_k <- gradient %*% solve(information, t(score_info$score))
-      minimum_eigenvalue <- score_info$minimum_eigenvalue
-      condition_number <- score_info$condition_number
+      if_g_k <- gradient %*%
+        solve(expected_information, t(score_info$score))
+      observed_minimum_eigenvalue <- score_info$minimum_eigenvalue
+      observed_condition_number <- score_info$condition_number
+      expected_minimum_eigenvalue <- expected_info$minimum_eigenvalue
+      expected_condition_number <- expected_info$condition_number
+      expected_score_norm <- expected_info$expected_score_norm
       score_norm <- score_info$score_norm
       convergence <- if (is.null(beta_fit)) NA_integer_ else beta_fit$convergence
       objective <- if (is.null(beta_fit)) NA_real_ else beta_fit$objective
       at_boundary <- isTRUE(beta_fit$at_boundary)
       degeneracy <- NA_character_
+      information_diagnostics[[k]] <- list(
+        observed = observed_information,
+        expected = expected_information,
+        expected_by_cluster_size = expected_info$conditional,
+        used = "expected"
+      )
     }
 
     contribution <- sweep(
@@ -371,9 +499,14 @@
       degeneracy = degeneracy,
       convergence = convergence,
       objective = objective,
-      minimum_eigenvalue = minimum_eigenvalue,
-      condition_number = condition_number,
+      minimum_eigenvalue = expected_minimum_eigenvalue,
+      condition_number = expected_condition_number,
+      observed_information_minimum_eigenvalue = observed_minimum_eigenvalue,
+      observed_information_condition_number = observed_condition_number,
+      expected_information_minimum_eigenvalue = expected_minimum_eigenvalue,
+      expected_information_condition_number = expected_condition_number,
       score_norm = score_norm,
+      expected_score_norm = expected_score_norm,
       at_parameter_boundary = at_boundary,
       pointwise_influence_norm = sqrt(sum(if_g_k^2)),
       isotonic_change = max(abs(cumul_isotonic[, k] - cumul_raw[, k])),
@@ -399,7 +532,7 @@
 
   if (any(diagnostics$condition_number > 1e8, na.rm = TRUE)) {
     warning(
-      "Some fitted Beta information matrices are poorly conditioned; inspect `fit$inference$diagnostics`.",
+      "Some fitted expected Beta Fisher information matrices are poorly conditioned; inspect `fit$inference$diagnostics`.",
       call. = FALSE
     )
   }
@@ -437,6 +570,7 @@
     cov = cov_mat,
     influence = influence,
     diagnostics = diagnostics,
+    information = information_diagnostics,
     grid_jacobian = grid_jacobian,
     cumul_raw = cumul_raw,
     cumul_isotonic = cumul_isotonic

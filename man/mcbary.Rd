@@ -83,7 +83,9 @@ barycenter quantile estimator (not the covariance of its square-root-n
 limit). For analytic inference, \code{influence} is the matrix of integrated
 unit-level influence functions, with units in rows and quantile levels in
 columns; otherwise it is \code{NULL}. \code{inference} records the selected inference
-method and diagnostics.
+method and diagnostics. Beta analytic diagnostics report both observed and
+fitted expected Fisher information; the expected information is used for
+influence-function inversion.
 }
 \description{
 Marginal-Constructed Barycenter Estimation and Inference

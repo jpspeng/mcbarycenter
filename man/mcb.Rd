@@ -79,7 +79,9 @@ is a data frame with columns
 \code{data} contains the original \code{id_col} and \code{val_col} columns from
 the input. \code{cov} is on the barycenter estimator scale. For analytic
 inference, \code{influence} contains integrated unit-level influence functions;
-otherwise it is \code{NULL}.
+otherwise it is \code{NULL}. Beta analytic diagnostics report both observed and
+fitted expected Fisher information; the expected information is used for
+influence-function inversion.
 }
 \description{
 Estimate marginal-constructed barycenter quantile curves with bootstrap,
